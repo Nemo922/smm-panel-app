@@ -26,7 +26,7 @@
         <header class="global-header">
             <div class="brand">
                 <i class="ph-fill ph-rocket-launch"></i>
-                <span>BoostPanel</span>
+                <span id="brand-name">SMM Panel</span>
             </div>
             <div style="display: flex; align-items: center; gap: 14px;">
                 <button id="theme-toggle" style="background: none; border: none; color: var(--tg-text-color); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; padding: 4px;">
@@ -34,7 +34,7 @@
                 </button>
                 <div class="user-balance">
                     <span class="balance-label">Bakiye</span>
-                    <span class="balance-amount">₺245.50</span>
+                    <span class="balance-amount">₺0.00</span>
                 </div>
             </div>
         </header>
@@ -76,7 +76,10 @@
 
             <!-- Hizmet Kartları Listesi -->
             <div class="services-list" id="services-container">
-                <!-- JavaScript tarafından dinamik doldurulacak -->
+                <div style="text-align:center; padding: 40px; color: var(--tg-hint-color);">
+                    <i class="ph ph-spinner" style="font-size:32px; display:block; margin-bottom:12px;"></i>
+                    Yükleniyor...
+                </div>
             </div>
             
             <div style="height: 20px;"></div>
@@ -85,39 +88,8 @@
         <!-- VIEW 2: ORDERS (Siparişlerim) -->
         <main class="view-section" id="view-orders">
             <h2 class="section-title">Sipariş Geçmişim</h2>
-            
-            <div class="orders-list">
-                <!-- Sipariş 1 -->
-                <div class="order-card">
-                    <div class="order-header">
-                        <span class="order-id">#10245</span>
-                        <span class="badge badge-success">Tamamlandı</span>
-                    </div>
-                    <div class="order-body">
-                        <h4>Instagram 1000 Türk Takipçi</h4>
-                        <p class="order-link">@kullaniciadi</p>
-                    </div>
-                    <div class="order-footer">
-                        <span class="order-date">10 Haz 2026</span>
-                        <span class="order-price">₺25.00</span>
-                    </div>
-                </div>
-
-                <!-- Sipariş 2 -->
-                <div class="order-card">
-                    <div class="order-header">
-                        <span class="order-id">#10246</span>
-                        <span class="badge badge-warning">İşlemde</span>
-                    </div>
-                    <div class="order-body">
-                        <h4>TikTok 5000 İzlenme</h4>
-                        <p class="order-link">tiktok.com/@video...</p>
-                    </div>
-                    <div class="order-footer">
-                        <span class="order-date">11 Haz 2026</span>
-                        <span class="order-price">₺5.50</span>
-                    </div>
-                </div>
+            <div class="orders-list" id="orders-container">
+                <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Henüz hiç siparişiniz yok.</p>
             </div>
         </main>
 
@@ -139,7 +111,7 @@
                     <div class="pay-icon crypto"><i class="ph ph-currency-btc"></i></div>
                     <div class="pay-info">
                         <h4>Kripto Para</h4>
-                        <p>USDT, BTC, ETH</p>
+                        <p id="crypto-networks-label">USDT TRC20</p>
                     </div>
                     <i class="ph ph-caret-right"></i>
                 </div>
@@ -154,10 +126,10 @@
                 </div>
             </div>
             
-            <div class="bonus-banner">
+            <div class="bonus-banner" id="bonus-banner">
                 <div class="banner-content">
-                    <h3>🚀 %10 Bonus Kampanyası</h3>
-                    <p>₺500 ve üzeri tüm bakiye yüklemelerinde anında %10 ekstra bonus cüzdanına eklenir.</p>
+                    <h3 id="bonus-title">🚀 %10 Bonus Kampanyası</h3>
+                    <p id="bonus-desc">₺500 ve üzeri tüm bakiye yüklemelerinde anında %10 ekstra bonus cüzdanına eklenir.</p>
                 </div>
             </div>
         </main>
@@ -202,15 +174,141 @@
 
         <!-- VIEW 5: ADMIN PANEL (Yönetici Paneli) -->
         <main class="view-section" id="view-admin">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-                <h2 class="section-title" style="margin-bottom: 0;">Bekleyen Talepler</h2>
-                <button id="btn-admin-refresh" class="close-modal" style="border-radius: 8px; width: auto; height: auto; padding: 6px 12px; font-size: 13px; font-weight: 600; display: flex; gap: 4px; align-items: center;">
-                    <i class="ph ph-arrows-clockwise"></i> Yenile
+            <div class="admin-header">
+                <button class="admin-back-btn" id="btn-admin-back">
+                    <i class="ph ph-arrow-left"></i>
+                </button>
+                <h2>Yönetici Paneli</h2>
+            </div>
+
+            <!-- Admin Tab Navigation -->
+            <div class="admin-tabs">
+                <button class="admin-tab active" data-tab="tab-payments">
+                    <i class="ph ph-clock-clockwise"></i>
+                    <span>Ödemeler</span>
+                </button>
+                <button class="admin-tab" data-tab="tab-services">
+                    <i class="ph ph-storefront"></i>
+                    <span>Ürünler</span>
+                </button>
+                <button class="admin-tab" data-tab="tab-users">
+                    <i class="ph ph-users"></i>
+                    <span>Kullanıcılar</span>
+                </button>
+                <button class="admin-tab" data-tab="tab-orders">
+                    <i class="ph ph-receipt"></i>
+                    <span>Siparişler</span>
+                </button>
+                <button class="admin-tab" data-tab="tab-settings">
+                    <i class="ph ph-gear"></i>
+                    <span>Ayarlar</span>
                 </button>
             </div>
-            
-            <div class="admin-payments-list" id="admin-payments-container">
-                <!-- Javascript will load it dynamically -->
+
+            <!-- TAB 1: Bekleyen Ödemeler -->
+            <div class="admin-tab-content active" id="tab-payments">
+                <div class="admin-section-header">
+                    <span>Bekleyen Bakiye Talepleri</span>
+                    <button class="btn-refresh" id="btn-admin-refresh"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <div class="admin-payments-list" id="admin-payments-container">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- TAB 2: Ürün Yönetimi -->
+            <div class="admin-tab-content" id="tab-services">
+                <div class="admin-section-header">
+                    <span>Ürün Listesi</span>
+                    <button class="btn-add-green" id="btn-show-add-service">
+                        <i class="ph ph-plus"></i> Yeni Ekle
+                    </button>
+                </div>
+
+                <!-- Add/Edit Service Form (hidden by default) -->
+                <div class="admin-form-card" id="service-form-card" style="display:none;">
+                    <h4 id="service-form-title">Yeni Ürün Ekle</h4>
+                    <input type="hidden" id="edit-service-id">
+                    <div class="admin-form-grid">
+                        <div class="input-group">
+                            <label>Platform</label>
+                            <select id="svc-platform" class="admin-select">
+                                <option value="instagram">Instagram</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="twitter">Twitter / X</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="other">Diğer</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>İkon (Phosphor)</label>
+                            <input type="text" id="svc-icon" placeholder="ph-instagram-logo">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Ürün Adı</label>
+                        <input type="text" id="svc-name" placeholder="Örn: Instagram Takipçi (Türk)">
+                    </div>
+                    <div class="input-group">
+                        <label>Açıklama</label>
+                        <input type="text" id="svc-desc" placeholder="Kısa açıklama">
+                    </div>
+                    <div class="admin-form-grid">
+                        <div class="input-group">
+                            <label>Fiyat (₺/1000)</label>
+                            <input type="number" id="svc-price" placeholder="25.00" step="0.01" min="0">
+                        </div>
+                        <div class="input-group">
+                            <label>Min. Miktar</label>
+                            <input type="number" id="svc-min" placeholder="100" min="1">
+                        </div>
+                        <div class="input-group">
+                            <label>Max. Miktar</label>
+                            <input type="number" id="svc-max" placeholder="50000" min="1">
+                        </div>
+                    </div>
+                    <div class="admin-form-actions">
+                        <button class="btn-cancel-form" id="btn-cancel-service-form">İptal</button>
+                        <button class="tg-button primary" id="btn-save-service">Kaydet</button>
+                    </div>
+                </div>
+
+                <div id="admin-services-list">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- TAB 3: Kullanıcı Yönetimi -->
+            <div class="admin-tab-content" id="tab-users">
+                <div class="admin-section-header">
+                    <span>Tüm Kullanıcılar</span>
+                    <button class="btn-refresh" id="btn-refresh-users"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <div id="admin-users-list">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- TAB 4: Sipariş Yönetimi -->
+            <div class="admin-tab-content" id="tab-orders">
+                <div class="admin-section-header">
+                    <span>Tüm Siparişler</span>
+                    <button class="btn-refresh" id="btn-refresh-orders"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <div id="admin-orders-list">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- TAB 5: Ayarlar -->
+            <div class="admin-tab-content" id="tab-settings">
+                <div class="admin-section-header">
+                    <span>Site Ayarları</span>
+                    <button class="btn-refresh" id="btn-refresh-settings"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <div id="admin-settings-container">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
             </div>
         </main>
 
@@ -234,7 +332,7 @@
             </a>
         </nav>
 
-        <!-- Sipariş Verme Modalı (Gizli) -->
+        <!-- Sipariş Verme Modalı -->
         <div class="modal-overlay" id="order-modal">
             <div class="modal-content">
                 <div class="modal-header">
@@ -266,7 +364,7 @@
             </div>
         </div>
 
-        <!-- Ödeme Bildirim Modalı (Gizli) -->
+        <!-- Ödeme Bildirim Modalı -->
         <div class="modal-overlay" id="payment-modal">
             <div class="modal-content">
                 <div class="modal-header">
@@ -288,6 +386,34 @@
                 </div>
                 <div class="modal-footer">
                     <button class="tg-button primary full-width" id="btn-submit-payment">Bildirimi Gönder</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kullanıcı Düzenleme Modalı (Admin) -->
+        <div class="modal-overlay" id="user-edit-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Kullanıcı Düzenle</h3>
+                    <button class="close-modal" id="close-user-edit-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-user-tg-id">
+                    <div class="input-group">
+                        <label>Ad</label>
+                        <input type="text" id="edit-user-name" placeholder="Kullanıcı adı">
+                    </div>
+                    <div class="input-group">
+                        <label>Bakiye (₺)</label>
+                        <input type="number" id="edit-user-balance" placeholder="0.00" step="0.01" min="0">
+                    </div>
+                    <div class="input-group">
+                        <label>Telegram ID</label>
+                        <input type="text" id="edit-user-tgid-display" disabled style="opacity:0.6;">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-save-user">Kaydet</button>
                 </div>
             </div>
         </div>

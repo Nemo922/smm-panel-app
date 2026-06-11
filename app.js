@@ -4,32 +4,23 @@ const tg = window.Telegram.WebApp;
 // Variables to store current state
 let currentUserData = null;
 let currentSelectedService = null;
+let smmServices = []; // Loaded from backend
+let appSettings = {}; // Loaded from backend
 
-// Mock Service Data (In a real app, this would also come from the backend)
-const smmServices = [
-    { id: 1, platform: 'instagram', name: 'Instagram Takipçi (Türk)', desc: 'Gerçek ve aktif Türk kullanıcılar.', pricePer1000: 25.00, min: 100, max: 50000, icon: 'ph-instagram-logo' },
-    { id: 2, platform: 'instagram', name: 'Instagram Beğeni (Global)', desc: 'Kaliteli global hesaplardan anında beğeni.', pricePer1000: 5.50, min: 50, max: 10000, icon: 'ph-heart' },
-    { id: 3, platform: 'tiktok', name: 'TikTok Video İzlenme', desc: 'Keşfet etkili yüksek hızlı video izlenme.', pricePer1000: 2.00, min: 1000, max: 1000000, icon: 'ph-tiktok-logo' },
-    { id: 4, platform: 'twitter', name: 'Twitter (X) Retweet', desc: 'Organik etkileşimli RT hizmeti.', pricePer1000: 45.00, min: 50, max: 5000, icon: 'ph-twitter-logo' },
-    { id: 5, platform: 'youtube', name: 'YouTube Abone', desc: 'Ömür boyu telafili abone servisi.', pricePer1000: 150.00, min: 100, max: 10000, icon: 'ph-youtube-logo' }
-];
-
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", async () => {
     tg.expand();
 
-    // Check saved theme or Telegram theme preference
+    // Theme
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark' || (!savedTheme && tg.colorScheme === 'dark')) {
         document.body.classList.add('dark-theme');
     } else {
         document.body.classList.remove('dark-theme');
     }
-    
-    if(tg.setHeaderColor) {
-        tg.setHeaderColor('bg_color');
-    }
-    
-    // Initialize theme toggle immediately before awaiting network calls
+    if (tg.setHeaderColor) tg.setHeaderColor('bg_color');
     setupThemeToggle();
 
     // Default mock user if not in Telegram
@@ -44,10 +35,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         username = user.username ? `@${user.username}` : `ID: ${user.id}`;
     }
 
-    // Store globally
     currentUserData = { telegram_id, first_name, username };
 
-    // Check user registration status from Python Backend
+    // Load public settings first (brand name, bank info, etc.)
+    await loadPublicSettings();
+
+    // Load services from backend
+    await loadServicesFromBackend();
+
+    // Check user registration
     await checkUserStatus(telegram_id);
 
     setupTabs();
@@ -61,96 +57,116 @@ document.addEventListener("DOMContentLoaded", async () => {
     tg.ready();
 });
 
-// CHECK REGISTRATION STATUS
+// ═══════════════════════════════════════════════════════════════
+// SETTINGS & BRAND
+// ═══════════════════════════════════════════════════════════════
+async function loadPublicSettings() {
+    try {
+        const res = await fetch('/api/settings/public');
+        const data = await res.json();
+        if (data.success) {
+            appSettings = data.settings;
+            applySettings(appSettings);
+        }
+    } catch (e) {
+        console.warn('Ayarlar yüklenemedi:', e);
+    }
+}
+
+function applySettings(settings) {
+    // Brand name
+    const brandEl = document.getElementById('brand-name');
+    if (brandEl && settings.brand_name) brandEl.textContent = settings.brand_name;
+
+    // Bonus banner
+    const bonusTitle = document.getElementById('bonus-title');
+    const bonusDesc = document.getElementById('bonus-desc');
+    if (bonusTitle && settings.bonus_text) bonusTitle.textContent = '🚀 ' + settings.bonus_text;
+    if (bonusDesc && settings.bonus_desc) bonusDesc.textContent = settings.bonus_desc;
+
+    // Crypto networks label
+    const cryptoLabel = document.getElementById('crypto-networks-label');
+    if (cryptoLabel && settings.crypto_networks) cryptoLabel.textContent = settings.crypto_networks;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SERVICES (from backend)
+// ═══════════════════════════════════════════════════════════════
+async function loadServicesFromBackend() {
+    try {
+        const res = await fetch('/api/services');
+        const data = await res.json();
+        if (data.success) {
+            smmServices = data.services;
+        }
+    } catch (e) {
+        console.warn('Servisler yüklenemedi:', e);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// USER AUTH
+// ═══════════════════════════════════════════════════════════════
 async function checkUserStatus(tg_id) {
     try {
         const response = await fetch(`/api/user?tg_id=${tg_id}`);
         const data = await response.json();
 
         if (data.registered) {
-            // Check if user has chosen a custom_username, if not, force them to set one
             if (!data.user.custom_username) {
-                document.body.classList.add('hide-nav'); // Hide bottom nav
+                document.body.classList.add('hide-nav');
                 showView('view-register');
                 document.getElementById('register-welcome').textContent = `Kullanıcı Adı Seçin, ${currentUserData.first_name}!`;
-                document.getElementById('btn-register').onclick = async () => {
-                    await registerUser(currentUserData);
-                };
+                document.getElementById('btn-register').onclick = async () => await registerUser(currentUserData);
                 return;
             }
-
-            // User is registered, go to Dashboard
             updateDashboardUI(data.user, data.orders);
             renderOrders(data.orders);
-            renderServices('all'); // Load services
-            
-            // Check Admin Status and toggle menu link
+            renderServices('all');
+
             const menuAdmin = document.getElementById('menu-admin');
             if (data.is_admin) {
                 if (menuAdmin) menuAdmin.style.display = 'flex';
             } else {
                 if (menuAdmin) menuAdmin.style.display = 'none';
             }
-            
             showView('view-services');
         } else {
-            // User not registered, show Register Screen
-            document.body.classList.add('hide-nav'); // Hide bottom nav
+            document.body.classList.add('hide-nav');
             showView('view-register');
-            
             document.getElementById('register-welcome').textContent = `Hoş Geldiniz, ${currentUserData.first_name}!`;
-            
-            // Setup Register Button
-            document.getElementById('btn-register').onclick = async () => {
-                await registerUser(currentUserData);
-            };
+            document.getElementById('btn-register').onclick = async () => await registerUser(currentUserData);
         }
     } catch (error) {
         console.error("Backend bağlantı hatası:", error);
-        // Fallback for testing without backend
-        alert("Bağlantı hatası: Sunucu kapalı olabilir. Lütfen backend'i çalıştırın.");
+        alert("Bağlantı hatası: Sunucu kapalı olabilir.");
     }
 }
 
-// REGISTER USER
 async function registerUser(userData) {
     const inputUsername = document.getElementById('register-username');
     const customUsername = inputUsername ? inputUsername.value.trim().toLowerCase() : '';
-    
-    // Check if empty
     if (!customUsername) {
-        if (tg.showAlert) tg.showAlert("Lütfen bir kullanıcı adı belirleyin.");
-        else alert("Lütfen bir kullanıcı adı belirleyin.");
+        showAlert("Lütfen bir kullanıcı adı belirleyin.");
         return;
     }
-    
-    // Validate character set (alphanumeric only, no space or turkish chars)
     const regex = /^[a-zA-Z0-9]+$/;
     if (!regex.test(customUsername)) {
-        const errMsg = "Kullanıcı adı sadece İngilizce harfler ve rakamlardan oluşmalı, boşluk veya Türkçe karakter içermemelidir.";
-        if (tg.showAlert) tg.showAlert(errMsg);
-        else alert(errMsg);
+        showAlert("Kullanıcı adı sadece İngilizce harfler ve rakamlardan oluşmalı.");
         return;
     }
-    
     const btn = document.getElementById('btn-register');
     btn.textContent = "Kontrol ediliyor...";
     btn.disabled = true;
-
     try {
-        // First check if username exists
         const checkRes = await fetch(`/api/check-username?username=${customUsername}`);
         const checkData = await checkRes.json();
-        
         if (checkData.exists) {
-            const errMsg = "Bu kullanıcı adı zaten alınmış. Lütfen başka bir tane deneyin.";
-            if (tg.showAlert) tg.showAlert(errMsg);
-            else alert(errMsg);
+            showAlert("Bu kullanıcı adı zaten alınmış. Lütfen başka bir tane deneyin.");
             btn.textContent = "Kayıt Ol ve Giriş Yap";
             btn.disabled = false;
             return;
         }
-
         btn.textContent = "Kaydediliyor...";
         const response = await fetch('/api/register', {
             method: 'POST',
@@ -163,105 +179,71 @@ async function registerUser(userData) {
             })
         });
         const data = await response.json();
-        
         if (data.success) {
-            if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-            // Refresh to load Dashboard
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
             await checkUserStatus(userData.telegram_id);
         } else {
-            const errMsg = data.detail || "Kayıt başarısız.";
-            if (tg.showAlert) tg.showAlert(errMsg);
-            else alert(errMsg);
+            showAlert(data.detail || "Kayıt başarısız.");
             btn.textContent = "Kayıt Ol ve Giriş Yap";
             btn.disabled = false;
         }
-    } catch(err) {
+    } catch (err) {
         btn.textContent = "Hata Oluştu, Tekrar Dene";
         btn.disabled = false;
     }
 }
 
-// UPDATE UI
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD UI
+// ═══════════════════════════════════════════════════════════════
 function updateDashboardUI(userDbInfo, orders = []) {
-    document.body.classList.remove('hide-nav'); // Show bottom nav
-
-    // Global Header Balance
+    document.body.classList.remove('hide-nav');
     document.querySelector('.balance-amount').textContent = `₺${userDbInfo.balance.toFixed(2)}`;
-
-    // Profile Page Info
     document.getElementById('user-name').textContent = userDbInfo.first_name;
-    document.getElementById('user-username').textContent = userDbInfo.username;
+    document.getElementById('user-username').textContent = userDbInfo.custom_username ? `@${userDbInfo.custom_username}` : userDbInfo.username;
     document.getElementById('user-avatar').textContent = userDbInfo.first_name.charAt(0).toUpperCase();
 
-    // Profile Page Stats
     const totalOrders = orders.length;
     const totalSpent = orders.reduce((sum, o) => sum + (o.price || 0), 0);
-
     const orderCountEl = document.getElementById('profile-order-count');
     const totalSpentEl = document.getElementById('profile-total-spent');
-    
     if (orderCountEl) orderCountEl.textContent = totalOrders;
     if (totalSpentEl) totalSpentEl.textContent = `₺${totalSpent.toFixed(2)}`;
 }
 
-// PROFILE MENU TRIGGERS (Yakında Gelecek)
-function setupProfileMenu() {
-    const btnSupport = document.getElementById('menu-support');
-    const btnTerms = document.getElementById('menu-terms');
-    
-    if (btnSupport) {
-        btnSupport.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (tg.showAlert) {
-                tg.showAlert("Destek talebi sistemi yakında aktif edilecektir.");
-            } else {
-                alert("Destek talebi sistemi yakında aktif edilecektir.");
-            }
-        });
-    }
-    
-    if (btnTerms) {
-        btnTerms.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (tg.showAlert) {
-                tg.showAlert("Hizmet şartları yakında yayınlanacaktır.");
-            } else {
-                alert("Hizmet şartları yakında yayınlanacaktır.");
-            }
-        });
-    }
-}
-
+// ═══════════════════════════════════════════════════════════════
+// ORDERS (USER SIDE)
+// ═══════════════════════════════════════════════════════════════
 function renderOrders(orders) {
-    const container = document.querySelector('.orders-list');
+    const container = document.getElementById('orders-container');
+    if (!container) return;
     container.innerHTML = '';
-
     if (!orders || orders.length === 0) {
         container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Henüz hiç siparişiniz yok.</p>';
         return;
     }
-
     orders.forEach(order => {
-        let badgeClass = 'badge-warning'; // İşlemde
-        if (order.status.toLowerCase() === 'tamamlandı') badgeClass = 'badge-success';
-        
-        // Find service name
+        let badgeClass = 'badge-warning';
+        const status = order.status || 'Bekliyor';
+        if (status === 'Tamamlandı') badgeClass = 'badge-success';
+        if (status === 'İptal Edildi') badgeClass = 'badge-danger';
+
         const srv = smmServices.find(s => s.id === order.service_id);
-        const srvName = srv ? srv.name : `Servis ID: ${order.service_id}`;
+        const srvName = srv ? srv.name : (order.service_name || `Servis #${order.service_id}`);
 
         const card = document.createElement('div');
         card.className = 'order-card';
         card.innerHTML = `
             <div class="order-header">
                 <span class="order-id">#${order.id}</span>
-                <span class="badge ${badgeClass}">${order.status}</span>
+                <span class="badge ${badgeClass}">${status}</span>
             </div>
             <div class="order-body">
                 <h4>${srvName}</h4>
                 <p class="order-link">${order.link} (${order.quantity} Adet)</p>
             </div>
             <div class="order-footer">
-                <span class="order-date">${new Date(order.order_date).toLocaleDateString()}</span>
+                <span class="order-date">${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
                 <span class="order-price">₺${order.price.toFixed(2)}</span>
             </div>
         `;
@@ -269,40 +251,47 @@ function renderOrders(orders) {
     });
 }
 
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
 function showView(viewId) {
     document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-    document.getElementById(viewId).classList.add('active');
+    const el = document.getElementById(viewId);
+    if (el) el.classList.add('active');
 }
 
 function setupTabs() {
     const navItems = document.querySelectorAll('.nav-item');
-    
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            if(tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
-
+            if (tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
             navItems.forEach(nav => {
                 nav.classList.remove('active');
                 const icon = nav.querySelector('i');
-                icon.className = icon.className.replace('ph-fill', 'ph');
+                if (icon) icon.className = icon.className.replace('ph-fill', 'ph');
             });
             item.classList.add('active');
             const activeIcon = item.querySelector('i');
-            activeIcon.className = activeIcon.className.replace('ph ', 'ph-fill ');
-
+            if (activeIcon) activeIcon.className = activeIcon.className.replace('ph ', 'ph-fill ');
             showView(item.getAttribute('data-target'));
             window.scrollTo(0, 0);
         });
     });
 }
 
+// ═══════════════════════════════════════════════════════════════
+// SERVICES (RENDER)
+// ═══════════════════════════════════════════════════════════════
 function renderServices(filterPlatform) {
     const container = document.getElementById('services-container');
+    if (!container) return;
     container.innerHTML = '';
-
     const filtered = filterPlatform === 'all' ? smmServices : smmServices.filter(s => s.platform === filterPlatform);
-
+    if (filtered.length === 0) {
+        container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 30px;">Bu kategoride henüz hizmet bulunmuyor.</p>';
+        return;
+    }
     filtered.forEach(service => {
         const card = document.createElement('div');
         card.className = 'service-card';
@@ -311,17 +300,16 @@ function renderServices(filterPlatform) {
                 <div class="service-icon platform-${service.platform}"><i class="ph ${service.icon}"></i></div>
                 <div class="service-info">
                     <h4>${service.name}</h4>
-                    <p>Min: ${service.min} - Max: ${service.max}</p>
+                    <p>Min: ${service.min_order} - Max: ${service.max_order}</p>
                 </div>
             </div>
             <div class="service-footer">
-                <div class="price">₺${service.pricePer1000.toFixed(2)} <span>/ 1000 Adet</span></div>
+                <div class="price">₺${parseFloat(service.price_per_1000).toFixed(2)} <span>/ 1000 Adet</span></div>
                 <button class="btn-buy" data-id="${service.id}">Satın Al</button>
             </div>
         `;
         container.appendChild(card);
     });
-
     document.querySelectorAll('.btn-buy').forEach(btn => {
         btn.addEventListener('click', (e) => {
             openOrderModal(parseInt(e.target.getAttribute('data-id')));
@@ -333,7 +321,7 @@ function setupCategoryFilters() {
     const chips = document.querySelectorAll('.category-chip');
     chips.forEach(chip => {
         chip.addEventListener('click', () => {
-            if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
             chips.forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
             renderServices(chip.getAttribute('data-cat'));
@@ -341,31 +329,21 @@ function setupCategoryFilters() {
     });
 }
 
-// Modals - Close on X button and overlay click
+// ═══════════════════════════════════════════════════════════════
+// ORDER MODAL
+// ═══════════════════════════════════════════════════════════════
 function setupModals() {
-    // ORDER MODAL
     const orderModal = document.getElementById('order-modal');
     const orderCloseBtn = orderModal ? orderModal.querySelector('.close-modal') : null;
-    
     if (orderCloseBtn) {
-        orderCloseBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            closeModal();
-        });
+        orderCloseBtn.addEventListener('click', (e) => { e.stopPropagation(); closeModal(); });
     }
-    
     if (orderModal) {
-        orderModal.addEventListener('click', (e) => {
-            if (e.target === orderModal) {
-                closeModal();
-            }
-        });
+        orderModal.addEventListener('click', (e) => { if (e.target === orderModal) closeModal(); });
     }
-    
-    // PAYMENT MODAL
+
     const paymentModalEl = document.getElementById('payment-modal');
     const paymentCloseBtn = paymentModalEl ? paymentModalEl.querySelector('.close-modal') : null;
-    
     if (paymentCloseBtn) {
         paymentCloseBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -373,13 +351,26 @@ function setupModals() {
             selectedPaymentMethod = null;
         });
     }
-    
     if (paymentModalEl) {
         paymentModalEl.addEventListener('click', (e) => {
             if (e.target === paymentModalEl) {
                 paymentModalEl.classList.remove('active');
                 selectedPaymentMethod = null;
             }
+        });
+    }
+
+    const userEditModal = document.getElementById('user-edit-modal');
+    const userEditCloseBtn = userEditModal ? userEditModal.querySelector('.close-modal') : null;
+    if (userEditCloseBtn) {
+        userEditCloseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userEditModal.classList.remove('active');
+        });
+    }
+    if (userEditModal) {
+        userEditModal.addEventListener('click', (e) => {
+            if (e.target === userEditModal) userEditModal.classList.remove('active');
         });
     }
 }
@@ -392,19 +383,16 @@ const btnSubmitOrder = document.getElementById('btn-submit-order');
 
 function openOrderModal(serviceId) {
     currentSelectedService = smmServices.find(s => s.id === serviceId);
-    
+    if (!currentSelectedService) return;
     document.getElementById('modal-service-name').textContent = currentSelectedService.name;
-    document.getElementById('modal-service-desc').textContent = currentSelectedService.desc;
-    document.getElementById('modal-min').textContent = currentSelectedService.min;
-    document.getElementById('modal-max').textContent = currentSelectedService.max;
-    
+    document.getElementById('modal-service-desc').textContent = currentSelectedService.description;
+    document.getElementById('modal-min').textContent = currentSelectedService.min_order;
+    document.getElementById('modal-max').textContent = currentSelectedService.max_order;
     inputLink.value = '';
-    inputQuantity.value = currentSelectedService.min;
+    inputQuantity.value = currentSelectedService.min_order;
     calculatePrice();
-
     modal.classList.add('active');
-    
-    if(tg.MainButton) {
+    if (tg.MainButton) {
         tg.MainButton.text = 'SİPARİŞİ ONAYLA';
         tg.MainButton.color = tg.themeParams.button_color || '#2481cc';
         tg.MainButton.show();
@@ -414,45 +402,36 @@ function openOrderModal(serviceId) {
 function closeModal() {
     modal.classList.remove('active');
     currentSelectedService = null;
-    if(tg.MainButton) tg.MainButton.hide();
+    if (tg.MainButton) tg.MainButton.hide();
 }
 
 inputQuantity.addEventListener('input', calculatePrice);
 
 function calculatePrice() {
-    if(!currentSelectedService) return;
+    if (!currentSelectedService) return;
     let qty = parseInt(inputQuantity.value) || 0;
-    
-    if(qty < currentSelectedService.min || qty > currentSelectedService.max) {
+    if (qty < currentSelectedService.min_order || qty > currentSelectedService.max_order) {
         inputQuantity.style.borderColor = 'var(--color-danger)';
     } else {
         inputQuantity.style.borderColor = 'var(--tg-button-color)';
     }
-
-    const price = (qty / 1000) * currentSelectedService.pricePer1000;
+    const price = (qty / 1000) * parseFloat(currentSelectedService.price_per_1000);
     elTotalPrice.textContent = `₺${price.toFixed(2)}`;
 }
 
-// Submit Order via API
 const submitOrder = async () => {
-    if(!currentSelectedService) return;
-    
+    if (!currentSelectedService) return;
     const link = inputLink.value.trim();
     const qty = parseInt(inputQuantity.value) || 0;
-
-    if(!link) { tg.showAlert("Lütfen bağlantı girin."); return; }
-    if(qty < currentSelectedService.min || qty > currentSelectedService.max) {
-        tg.showAlert(`Miktar ${currentSelectedService.min} - ${currentSelectedService.max} arasında olmalıdır.`);
+    if (!link) { showAlert("Lütfen bağlantı girin."); return; }
+    if (qty < currentSelectedService.min_order || qty > currentSelectedService.max_order) {
+        showAlert(`Miktar ${currentSelectedService.min_order} - ${currentSelectedService.max_order} arasında olmalıdır.`);
         return;
     }
-
-    const price = ((qty / 1000) * currentSelectedService.pricePer1000);
-
-    // Disable button to prevent double clicks
-    if(tg.MainButton) tg.MainButton.showProgress();
+    const price = (qty / 1000) * parseFloat(currentSelectedService.price_per_1000);
+    if (tg.MainButton) tg.MainButton.showProgress();
     btnSubmitOrder.disabled = true;
     btnSubmitOrder.textContent = "İşleniyor...";
-
     try {
         const response = await fetch('/api/order', {
             method: 'POST',
@@ -460,90 +439,43 @@ const submitOrder = async () => {
             body: JSON.stringify({
                 telegram_id: currentUserData.telegram_id,
                 service_id: currentSelectedService.id,
-                link: link,
-                quantity: qty,
-                price: price
+                link, quantity: qty, price
             })
         });
-
         const data = await response.json();
- 
         if (response.ok && data.success) {
-            if(tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-            tg.showAlert("Sipariş başarıyla oluşturuldu! (Bakiye düşüldü)");
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+            showAlert("✅ Siparişiniz başarıyla oluşturuldu!");
             closeModal();
-            // Refresh User Data to update balance and orders
             await checkUserStatus(currentUserData.telegram_id);
-            // Switch to orders tab
             document.querySelector('[data-target="view-orders"]').click();
         } else {
             if (response.status === 400 && data.detail === "Bakiye yetersiz") {
-                if (tg.showConfirm) {
-                    tg.showConfirm("Bakiyeniz bu sipariş için yetersizdir. Bakiye yükleme sayfasına gitmek ister misiniz?", (confirmed) => {
-                        if (confirmed) {
-                            closeModal();
-                            document.querySelector('[data-target="view-funds"]').click();
-                        }
-                    });
-                } else {
-                    const confirmed = confirm("Bakiyeniz bu sipariş için yetersizdir. Bakiye yükleme sayfasına gitmek ister misiniz?");
+                showConfirm("Bakiyeniz yetersiz! Bakiye yükleme sayfasına gitmek ister misiniz?", (confirmed) => {
                     if (confirmed) {
                         closeModal();
                         document.querySelector('[data-target="view-funds"]').click();
                     }
-                }
+                });
             } else {
-                tg.showAlert(`Hata: ${data.detail || 'Bilinmeyen Hata'}`);
+                showAlert(`Hata: ${data.detail || 'Bilinmeyen Hata'}`);
             }
         }
-    } catch(err) {
-        tg.showAlert("Sunucu bağlantı hatası!");
+    } catch (err) {
+        showAlert("Sunucu bağlantı hatası!");
     } finally {
-        if(tg.MainButton) tg.MainButton.hideProgress();
+        if (tg.MainButton) tg.MainButton.hideProgress();
         btnSubmitOrder.disabled = false;
         btnSubmitOrder.textContent = "Siparişi Onayla";
     }
 };
- 
+
 btnSubmitOrder.addEventListener('click', submitOrder);
 tg.onEvent('mainButtonClicked', submitOrder);
 
-// Drag Scroll for category chip menu on desktop
-function setupDragScroll() {
-    const slider = document.getElementById('category-list');
-    if (!slider) return;
-    
-    let isDown = false;
-    let startX;
-    let scrollLeft;
-
-    slider.addEventListener('mousedown', (e) => {
-        isDown = true;
-        slider.classList.add('active-drag');
-        startX = e.pageX - slider.offsetLeft;
-        scrollLeft = slider.scrollLeft;
-    });
-    
-    slider.addEventListener('mouseleave', () => {
-        isDown = false;
-        slider.classList.remove('active-drag');
-    });
-    
-    slider.addEventListener('mouseup', () => {
-        isDown = false;
-        slider.classList.remove('active-drag');
-    });
-    
-    slider.addEventListener('mousemove', (e) => {
-        if(!isDown) return;
-        e.preventDefault();
-        const x = e.pageX - slider.offsetLeft;
-        const walk = (x - startX) * 2; // scroll speed multiplier
-        slider.scrollLeft = scrollLeft - walk;
-    });
-}
-
-// Payment modal management
+// ═══════════════════════════════════════════════════════════════
+// PAYMENT MODAL
+// ═══════════════════════════════════════════════════════════════
 let selectedPaymentMethod = null;
 const paymentModal = document.getElementById('payment-modal');
 const inputPaymentAmount = document.getElementById('payment-amount');
@@ -551,61 +483,47 @@ const inputPaymentDetails = document.getElementById('payment-details');
 const btnSubmitPayment = document.getElementById('btn-submit-payment');
 
 function setupPaymentModal() {
-    // Select payment method cards
     const paymentCards = document.querySelectorAll('.payment-card');
     paymentCards.forEach(card => {
         card.addEventListener('click', () => {
             selectedPaymentMethod = card.getAttribute('data-method');
             if (!selectedPaymentMethod) return;
-            
             if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-            
             document.getElementById('modal-payment-name').textContent = selectedPaymentMethod;
-            
-            // Set details label and description based on method
             const lblDetails = document.getElementById('lbl-payment-details');
             const elDesc = document.getElementById('modal-payment-desc');
-            
             inputPaymentAmount.value = '';
             inputPaymentDetails.value = '';
-            
+            const bankName = appSettings.bank_name || 'Ziraat Bankası';
+            const bankIban = appSettings.bank_iban || 'TR99 0001 0000 0000 1234 5678 90';
+            const bankRecipient = appSettings.bank_recipient || 'SMM Panel';
+            const cryptoAddr = appSettings.crypto_usdt_address || 'TY1234567890abcdef1234567890abcdef';
+            const cryptoNet = appSettings.crypto_networks || 'USDT TRC20';
             if (selectedPaymentMethod === "Havale / EFT") {
-                elDesc.innerHTML = "<b>Ziraat Bankası IBAN:</b> TR99 0001 0000 0000 1234 5678 90<br><b>Alıcı:</b> BoostPanel SMM<br><br>Lütfen transferi tamamladıktan sonra buraya tutar ve gönderen isim soyismini yazın.";
+                elDesc.innerHTML = `<b>${bankName} IBAN:</b> ${bankIban}<br><b>Alıcı:</b> ${bankRecipient}<br><br>Lütfen transferi tamamladıktan sonra buraya tutar ve gönderen isim soyisminizi yazın.`;
                 lblDetails.textContent = "Gönderen Adı Soyadı";
                 inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz";
             } else if (selectedPaymentMethod === "Kripto Para") {
-                elDesc.innerHTML = "<b>USDT TRC20 Adresi:</b> TY1234567890abcdef1234567890abcdef<br><br>Lütfen gönderimi tamamladıktan sonra buraya tutar ve gönderim yaptığınız TXID (İşlem Kodu) bilgisini yazın.";
+                elDesc.innerHTML = `<b>${cryptoNet} Adresi:</b> <code style="font-size:11px;word-break:break-all">${cryptoAddr}</code><br><br>Lütfen gönderimi tamamladıktan sonra TXID bilgisini yazın.`;
                 lblDetails.textContent = "TXID / Cüzdan Adresiniz";
-                inputPaymentDetails.placeholder = "Örn: e983f...c12a veya cüzdan adresi";
+                inputPaymentDetails.placeholder = "Örn: e983f...c12a";
             } else {
-                elDesc.innerHTML = "Manuel Kredi / Banka kartı ödeme bildirim ekranıdır.<br><br>Lütfen ödemeyi yaptıktan sonra buraya ödeme detaylarını ve adınızı soyadınızı yazın.";
+                elDesc.innerHTML = "Manuel Kredi / Banka kartı ödeme bildirim ekranıdır.<br><br>Lütfen ödemeyi yaptıktan sonra ödeme detaylarını ve adınızı soyadınızı yazın.";
                 lblDetails.textContent = "Ödeme Detayları ve İsim";
                 inputPaymentDetails.placeholder = "Örn: Kredi kartı ile 100 TL ödeme yaptım, Ahmet Yılmaz";
             }
-            
             paymentModal.classList.add('active');
         });
     });
-    
+
     if (btnSubmitPayment) {
         btnSubmitPayment.addEventListener('click', async () => {
             const amountVal = parseFloat(inputPaymentAmount.value) || 0;
             const detailsVal = inputPaymentDetails.value.trim();
-            
-            if (amountVal <= 0) {
-                if (tg.showAlert) tg.showAlert("Lütfen geçerli bir tutar girin.");
-                else alert("Lütfen geçerli bir tutar girin.");
-                return;
-            }
-            if (!detailsVal) {
-                if (tg.showAlert) tg.showAlert("Lütfen açıklama/isim bilgisini doldurun.");
-                else alert("Lütfen açıklama/isim bilgisini doldurun.");
-                return;
-            }
-            
+            if (amountVal <= 0) { showAlert("Lütfen geçerli bir tutar girin."); return; }
+            if (!detailsVal) { showAlert("Lütfen açıklama/isim bilgisini doldurun."); return; }
             btnSubmitPayment.disabled = true;
             btnSubmitPayment.textContent = "Gönderiliyor...";
-            
             try {
                 const response = await fetch('/api/payment-request', {
                     method: 'POST',
@@ -617,20 +535,16 @@ function setupPaymentModal() {
                         details: detailsVal
                     })
                 });
-                
                 const data = await response.json();
                 if (response.ok && data.success) {
                     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                    if (tg.showAlert) tg.showAlert("Ödeme bildiriminiz alınmıştır. Yönetici onayından sonra bakiyeniz yüklenecektir.");
-                    else alert("Ödeme bildiriminiz alınmıştır. Yönetici onayından sonra bakiyeniz yüklenecektir.");
+                    showAlert("✅ Ödeme bildiriminiz alındı. Yönetici onayından sonra bakiyeniz yüklenecektir.");
                     paymentModal.classList.remove('active');
                 } else {
-                    if (tg.showAlert) tg.showAlert(`Hata: ${data.detail || 'Bildirim gönderilemedi'}`);
-                    else alert(`Hata: ${data.detail || 'Bildirim gönderilemedi'}`);
+                    showAlert(`Hata: ${data.detail || 'Bildirim gönderilemedi'}`);
                 }
-            } catch(e) {
-                if (tg.showAlert) tg.showAlert("Sunucuyla bağlantı kurulamadı.");
-                else alert("Sunucuyla bağlantı kurulamadı.");
+            } catch (e) {
+                showAlert("Sunucuyla bağlantı kurulamadı.");
             } finally {
                 btnSubmitPayment.disabled = false;
                 btnSubmitPayment.textContent = "Bildirimi Gönder";
@@ -639,15 +553,54 @@ function setupPaymentModal() {
     }
 }
 
-// Admin Panel Controller
+// ═══════════════════════════════════════════════════════════════
+// PROFILE MENU
+// ═══════════════════════════════════════════════════════════════
+function setupProfileMenu() {
+    const btnSupport = document.getElementById('menu-support');
+    const btnTerms = document.getElementById('menu-terms');
+    if (btnSupport) {
+        btnSupport.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAlert("Destek talebi sistemi yakında aktif edilecektir.");
+        });
+    }
+    if (btnTerms) {
+        btnTerms.addEventListener('click', (e) => {
+            e.preventDefault();
+            showAlert("Hizmet şartları yakında yayınlanacaktır.");
+        });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRAG SCROLL
+// ═══════════════════════════════════════════════════════════════
+function setupDragScroll() {
+    const slider = document.getElementById('category-list');
+    if (!slider) return;
+    let isDown = false, startX, scrollLeft;
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true; slider.classList.add('active-drag');
+        startX = e.pageX - slider.offsetLeft; scrollLeft = slider.scrollLeft;
+    });
+    slider.addEventListener('mouseleave', () => { isDown = false; slider.classList.remove('active-drag'); });
+    slider.addEventListener('mouseup', () => { isDown = false; slider.classList.remove('active-drag'); });
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return; e.preventDefault();
+        const x = e.pageX - slider.offsetLeft;
+        slider.scrollLeft = scrollLeft - (x - startX) * 2;
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════════════════════════════
 function setupAdminPanel() {
     const menuAdmin = document.getElementById('menu-admin');
-    const btnRefresh = document.getElementById('btn-admin-refresh');
-    
     if (menuAdmin) {
         menuAdmin.addEventListener('click', (e) => {
             e.preventDefault();
-            // Switch tabs visually: deselect bottom nav
             document.querySelectorAll('.nav-item').forEach(nav => {
                 nav.classList.remove('active');
                 const icon = nav.querySelector('i');
@@ -657,121 +610,452 @@ function setupAdminPanel() {
             loadPendingPayments();
         });
     }
-    
-    if (btnRefresh) {
-        btnRefresh.addEventListener('click', () => {
-            loadPendingPayments();
+
+    // Back button
+    const backBtn = document.getElementById('btn-admin-back');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            showView('view-profile');
+            document.querySelector('[data-target="view-profile"]').classList.add('active');
         });
     }
+
+    // Admin tabs
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            const tabId = tab.getAttribute('data-tab');
+            const content = document.getElementById(tabId);
+            if (content) content.classList.add('active');
+            // Auto-load on tab switch
+            if (tabId === 'tab-payments') loadPendingPayments();
+            else if (tabId === 'tab-services') loadAdminServices();
+            else if (tabId === 'tab-users') loadAdminUsers();
+            else if (tabId === 'tab-orders') loadAdminOrders();
+            else if (tabId === 'tab-settings') loadAdminSettings();
+        });
+    });
+
+    // Refresh buttons
+    document.getElementById('btn-admin-refresh')?.addEventListener('click', loadPendingPayments);
+    document.getElementById('btn-refresh-users')?.addEventListener('click', loadAdminUsers);
+    document.getElementById('btn-refresh-orders')?.addEventListener('click', loadAdminOrders);
+    document.getElementById('btn-refresh-settings')?.addEventListener('click', loadAdminSettings);
+
+    // Service form
+    document.getElementById('btn-show-add-service')?.addEventListener('click', () => {
+        openServiceForm(null);
+    });
+    document.getElementById('btn-cancel-service-form')?.addEventListener('click', () => {
+        document.getElementById('service-form-card').style.display = 'none';
+    });
+    document.getElementById('btn-save-service')?.addEventListener('click', saveService);
+
+    // Save user
+    document.getElementById('btn-save-user')?.addEventListener('click', saveUser);
 }
 
+// ─── PAYMENTS TAB ────────────────────────────────────────────
 async function loadPendingPayments() {
     const container = document.getElementById('admin-payments-container');
+    if (!container) return;
     container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>';
-    
     try {
         const response = await fetch(`/api/admin/pending-payments?tg_id=${currentUserData.telegram_id}`);
         const data = await response.json();
-        
         if (response.ok && data.success) {
             container.innerHTML = '';
-            const requests = data.requests;
-            
-            if (requests.length === 0) {
+            if (data.requests.length === 0) {
                 container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Bekleyen bakiye bildirimi bulunmuyor.</p>';
                 return;
             }
-            
-            requests.forEach(req => {
+            data.requests.forEach(req => {
                 const card = document.createElement('div');
                 card.className = 'admin-payment-card';
                 card.innerHTML = `
                     <div class="admin-payment-header">
-                        <div class="admin-payment-user">
-                            ${req.first_name} (@${req.custom_username})
-                        </div>
-                        <div class="admin-payment-amount">
-                            ₺${req.amount.toFixed(2)}
-                        </div>
+                        <div class="admin-payment-user">${req.first_name} (@${req.custom_username})</div>
+                        <div class="admin-payment-amount">₺${req.amount.toFixed(2)}</div>
                     </div>
-                    <div style="font-size:12px; color:var(--tg-hint-color)">
-                        Yöntem: <b>${req.payment_method}</b> | Tarih: ${new Date(req.request_date).toLocaleString()}
-                    </div>
-                    <div class="admin-payment-details">
-                        ${req.details}
-                    </div>
+                    <div style="font-size:12px; color:var(--tg-hint-color)">Yöntem: <b>${req.payment_method}</b> | ${new Date(req.request_date).toLocaleString('tr-TR')}</div>
+                    <div class="admin-payment-details">${req.details}</div>
                     <div class="admin-payment-actions">
-                        <button class="btn-approve" data-id="${req.id}">Onayla</button>
-                        <button class="btn-reject" data-id="${req.id}">Reddet</button>
+                        <button class="btn-approve" data-id="${req.id}"><i class="ph ph-check"></i> Onayla</button>
+                        <button class="btn-reject" data-id="${req.id}"><i class="ph ph-x"></i> Reddet</button>
                     </div>
                 `;
                 container.appendChild(card);
             });
-            
-            // Attach action listeners
             container.querySelectorAll('.btn-approve').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
-                    const id = parseInt(e.target.getAttribute('data-id'));
-                    await processPaymentAction(id, 'approve');
+                    await processPaymentAction(parseInt(e.currentTarget.getAttribute('data-id')), 'approve');
                 });
             });
-            
             container.querySelectorAll('.btn-reject').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
-                    const id = parseInt(e.target.getAttribute('data-id'));
-                    await processPaymentAction(id, 'reject');
+                    await processPaymentAction(parseInt(e.currentTarget.getAttribute('data-id')), 'reject');
                 });
             });
-            
         } else {
-            container.innerHTML = `<p style="text-align:center; color:var(--color-danger); padding: 20px;">Hata: ${data.detail || 'Veriler yüklenemedi'}</p>`;
+            container.innerHTML = `<p style="text-align:center; color:var(--color-danger); padding: 20px;">Hata: ${data.detail || 'Yüklenemedi'}</p>`;
         }
-    } catch(e) {
+    } catch (e) {
         container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding: 20px;">Sunucuyla bağlantı kurulamadı.</p>';
     }
 }
 
 async function processPaymentAction(requestId, actionType) {
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-    
     const endpoint = actionType === 'approve' ? '/api/admin/approve-payment' : '/api/admin/reject-payment';
-    
     try {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                admin_id: currentUserData.telegram_id,
-                request_id: requestId
-            })
+            body: JSON.stringify({ admin_id: currentUserData.telegram_id, request_id: requestId })
         });
         const data = await response.json();
-        
-        if (response.ok && data.success) {
-            if (tg.showAlert) tg.showAlert(data.message);
-            else alert(data.message);
-            await loadPendingPayments();
-        } else {
-            if (tg.showAlert) tg.showAlert(`Hata: ${data.detail || 'İşlem başarısız'}`);
-            else alert(`Hata: ${data.detail || 'İşlem başarısız'}`);
-        }
-    } catch(e) {
-        if (tg.showAlert) tg.showAlert("Sunucuyla bağlantı kurulamadı.");
-        else alert("Sunucuyla bağlantı kurulamadı.");
+        showAlert(data.message || (data.success ? 'İşlem başarılı.' : 'İşlem başarısız.'));
+        if (data.success) await loadPendingPayments();
+    } catch (e) {
+        showAlert("Sunucuyla bağlantı kurulamadı.");
     }
 }
 
-// Theme toggler logic
+// ─── SERVICES TAB ────────────────────────────────────────────
+async function loadAdminServices() {
+    const container = document.getElementById('admin-services-list');
+    if (!container) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/admin/services?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            container.innerHTML = '';
+            if (data.services.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Henüz ürün yok. Yeni Ekle butonunu kullanın.</p>';
+                return;
+            }
+            data.services.forEach(svc => {
+                const card = document.createElement('div');
+                card.className = `admin-service-card ${!svc.is_active ? 'inactive' : ''}`;
+                card.innerHTML = `
+                    <div class="admin-service-info">
+                        <div class="service-icon platform-${svc.platform}" style="width:36px;height:36px;font-size:18px;flex-shrink:0;">
+                            <i class="ph ${svc.icon}"></i>
+                        </div>
+                        <div>
+                            <div class="admin-service-name">${svc.name}</div>
+                            <div class="admin-service-meta">₺${parseFloat(svc.price_per_1000).toFixed(2)}/1000 · ${svc.platform} · ${svc.is_active ? '<span style="color:var(--color-success)">Aktif</span>' : '<span style="color:var(--color-danger)">Pasif</span>'}</div>
+                        </div>
+                    </div>
+                    <div class="admin-service-actions">
+                        <button class="btn-edit-svc" data-id="${svc.id}"><i class="ph ph-pencil-simple"></i></button>
+                        <button class="btn-delete-svc" data-id="${svc.id}"><i class="ph ph-trash"></i></button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            container.querySelectorAll('.btn-edit-svc').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    const svc = data.services.find(s => s.id === id);
+                    openServiceForm(svc);
+                });
+            });
+            container.querySelectorAll('.btn-delete-svc').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    showConfirm("Bu ürünü silmek istediğinize emin misiniz?", async (confirmed) => {
+                        if (!confirmed) return;
+                        try {
+                            const res = await fetch('/api/admin/service/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ admin_id: currentUserData.telegram_id, service_id: id })
+                            });
+                            const d = await res.json();
+                            showAlert(d.message || 'Silindi.');
+                            await loadAdminServices();
+                            await loadServicesFromBackend();
+                        } catch { showAlert("Hata oluştu."); }
+                    });
+                });
+            });
+        } else {
+            container.innerHTML = `<p style="text-align:center; color:var(--color-danger); padding:20px;">${data.detail || 'Yüklenemedi'}</p>`;
+        }
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:20px;">Bağlantı hatası.</p>';
+    }
+}
+
+function openServiceForm(svc) {
+    const formCard = document.getElementById('service-form-card');
+    document.getElementById('service-form-title').textContent = svc ? 'Ürünü Düzenle' : 'Yeni Ürün Ekle';
+    document.getElementById('edit-service-id').value = svc ? svc.id : '';
+    document.getElementById('svc-platform').value = svc ? svc.platform : 'instagram';
+    document.getElementById('svc-icon').value = svc ? svc.icon : 'ph-star';
+    document.getElementById('svc-name').value = svc ? svc.name : '';
+    document.getElementById('svc-desc').value = svc ? svc.description : '';
+    document.getElementById('svc-price').value = svc ? svc.price_per_1000 : '';
+    document.getElementById('svc-min').value = svc ? svc.min_order : '';
+    document.getElementById('svc-max').value = svc ? svc.max_order : '';
+    formCard.style.display = 'block';
+    formCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveService() {
+    const serviceId = document.getElementById('edit-service-id').value;
+    const payload = {
+        admin_id: currentUserData.telegram_id,
+        platform: document.getElementById('svc-platform').value,
+        name: document.getElementById('svc-name').value.trim(),
+        description: document.getElementById('svc-desc').value.trim(),
+        price_per_1000: parseFloat(document.getElementById('svc-price').value) || 0,
+        min_order: parseInt(document.getElementById('svc-min').value) || 100,
+        max_order: parseInt(document.getElementById('svc-max').value) || 10000,
+        icon: document.getElementById('svc-icon').value.trim() || 'ph-star',
+    };
+    if (!payload.name || payload.price_per_1000 <= 0) {
+        showAlert("Lütfen ürün adı ve geçerli fiyat girin."); return;
+    }
+    const btn = document.getElementById('btn-save-service');
+    btn.disabled = true; btn.textContent = "Kaydediliyor...";
+    try {
+        let endpoint, body;
+        if (serviceId) {
+            endpoint = '/api/admin/service/update';
+            body = { ...payload, service_id: parseInt(serviceId), is_active: true };
+        } else {
+            endpoint = '/api/admin/service/create';
+            body = payload;
+        }
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const d = await res.json();
+        showAlert(d.message || 'Kaydedildi.');
+        document.getElementById('service-form-card').style.display = 'none';
+        await loadAdminServices();
+        await loadServicesFromBackend();
+        renderServices('all');
+    } catch { showAlert("Hata oluştu."); }
+    finally { btn.disabled = false; btn.textContent = "Kaydet"; }
+}
+
+// ─── USERS TAB ───────────────────────────────────────────────
+async function loadAdminUsers() {
+    const container = document.getElementById('admin-users-list');
+    if (!container) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/admin/users?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            container.innerHTML = '';
+            if (data.users.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Henüz kullanıcı yok.</p>';
+                return;
+            }
+            data.users.forEach(user => {
+                const card = document.createElement('div');
+                card.className = 'admin-user-card';
+                card.innerHTML = `
+                    <div class="admin-user-avatar">${(user.first_name || '?').charAt(0).toUpperCase()}</div>
+                    <div class="admin-user-info">
+                        <div class="admin-user-name">${user.first_name || 'Bilinmiyor'}</div>
+                        <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}</div>
+                        <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b></div>
+                    </div>
+                    <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}">
+                        <i class="ph ph-pencil-simple"></i>
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+            container.querySelectorAll('.btn-edit-user').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const b = e.currentTarget;
+                    openUserEditModal(b.dataset.tgid, b.dataset.name, b.dataset.balance);
+                });
+            });
+        } else {
+            container.innerHTML = `<p style="color:var(--color-danger);padding:20px;">${data.detail || 'Yüklenemedi'}</p>`;
+        }
+    } catch {
+        container.innerHTML = '<p style="color:var(--color-danger);padding:20px;">Bağlantı hatası.</p>';
+    }
+}
+
+function openUserEditModal(tgId, name, balance) {
+    document.getElementById('edit-user-tg-id').value = tgId;
+    document.getElementById('edit-user-name').value = name;
+    document.getElementById('edit-user-balance').value = parseFloat(balance).toFixed(2);
+    document.getElementById('edit-user-tgid-display').value = tgId;
+    document.getElementById('user-edit-modal').classList.add('active');
+}
+
+async function saveUser() {
+    const tgId = parseInt(document.getElementById('edit-user-tg-id').value);
+    const name = document.getElementById('edit-user-name').value.trim();
+    const balance = parseFloat(document.getElementById('edit-user-balance').value) || 0;
+    if (!name) { showAlert("Ad boş olamaz."); return; }
+    const btn = document.getElementById('btn-save-user');
+    btn.disabled = true; btn.textContent = "Kaydediliyor...";
+    try {
+        const res = await fetch('/api/admin/user/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, balance, first_name: name })
+        });
+        const d = await res.json();
+        showAlert(d.message || 'Güncellendi.');
+        document.getElementById('user-edit-modal').classList.remove('active');
+        await loadAdminUsers();
+    } catch { showAlert("Hata oluştu."); }
+    finally { btn.disabled = false; btn.textContent = "Kaydet"; }
+}
+
+// ─── ORDERS TAB ──────────────────────────────────────────────
+async function loadAdminOrders() {
+    const container = document.getElementById('admin-orders-list');
+    if (!container) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/admin/orders?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            container.innerHTML = '';
+            if (data.orders.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Henüz sipariş yok.</p>';
+                return;
+            }
+            data.orders.forEach(order => {
+                const card = document.createElement('div');
+                card.className = 'admin-order-card';
+                const statusColors = { 'Tamamlandı': 'var(--color-success)', 'İptal Edildi': 'var(--color-danger)', 'Bekliyor': 'var(--color-warning)' };
+                const color = statusColors[order.status] || 'var(--tg-hint-color)';
+                card.innerHTML = `
+                    <div class="admin-order-header">
+                        <span class="admin-order-id">#${order.id}</span>
+                        <span style="font-size:12px;font-weight:700;color:${color}">${order.status}</span>
+                    </div>
+                    <div class="admin-order-service">${order.service_name || `Servis #${order.service_id}`}</div>
+                    <div class="admin-order-meta">👤 ${order.first_name} (@${order.custom_username}) · ${order.quantity.toLocaleString()} adet</div>
+                    <div class="admin-order-meta" style="word-break:break-all">🔗 ${order.link}</div>
+                    <div class="admin-order-footer">
+                        <span>₺${parseFloat(order.price).toFixed(2)}</span>
+                        <span>${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
+                        ${order.status !== 'İptal Edildi' ? `<button class="btn-cancel-order" data-id="${order.id}"><i class="ph ph-x-circle"></i> İptal & İade</button>` : ''}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            container.querySelectorAll('.btn-cancel-order').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    showConfirm("Bu siparişi iptal edip bakiyeyi iade etmek istiyor musunuz?", async (confirmed) => {
+                        if (!confirmed) return;
+                        try {
+                            const res = await fetch('/api/admin/order/cancel', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ admin_id: currentUserData.telegram_id, order_id: id })
+                            });
+                            const d = await res.json();
+                            showAlert(d.message);
+                            await loadAdminOrders();
+                        } catch { showAlert("Hata oluştu."); }
+                    });
+                });
+            });
+        } else {
+            container.innerHTML = `<p style="color:var(--color-danger);padding:20px;">${data.detail || 'Yüklenemedi'}</p>`;
+        }
+    } catch {
+        container.innerHTML = '<p style="color:var(--color-danger);padding:20px;">Bağlantı hatası.</p>';
+    }
+}
+
+// ─── SETTINGS TAB ────────────────────────────────────────────
+const settingLabels = {
+    brand_name: 'Site Adı',
+    bank_name: 'Banka Adı',
+    bank_iban: 'IBAN Numarası',
+    bank_recipient: 'Alıcı Adı',
+    crypto_usdt_address: 'USDT Adresi',
+    crypto_networks: 'Kripto Ağı',
+    bonus_text: 'Bonus Banner Başlığı',
+    bonus_desc: 'Bonus Banner Açıklaması',
+    bonus_threshold: 'Bonus Eşik Tutarı (₺)',
+    bonus_percent: 'Bonus Yüzdesi (%)',
+};
+
+async function loadAdminSettings() {
+    const container = document.getElementById('admin-settings-container');
+    if (!container) return;
+    container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/admin/settings?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            container.innerHTML = '';
+            Object.entries(data.settings).forEach(([key, value]) => {
+                const label = settingLabels[key] || key;
+                const group = document.createElement('div');
+                group.className = 'admin-setting-group';
+                group.innerHTML = `
+                    <div class="admin-setting-label">${label}</div>
+                    <div class="admin-setting-row">
+                        <input type="text" class="admin-setting-input" id="setting-${key}" value="${value}" placeholder="${label}">
+                        <button class="btn-save-setting" data-key="${key}"><i class="ph ph-floppy-disk"></i></button>
+                    </div>
+                `;
+                container.appendChild(group);
+            });
+            container.querySelectorAll('.btn-save-setting').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const key = e.currentTarget.getAttribute('data-key');
+                    const value = document.getElementById(`setting-${key}`).value.trim();
+                    if (!value) { showAlert("Değer boş olamaz."); return; }
+                    try {
+                        const res = await fetch('/api/admin/settings/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ admin_id: currentUserData.telegram_id, key, value })
+                        });
+                        const d = await res.json();
+                        if (d.success) {
+                            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                            // Reload settings and reapply
+                            appSettings[key] = value;
+                            applySettings(appSettings);
+                            showAlert(`✅ "${settingLabels[key] || key}" güncellendi.`);
+                        }
+                    } catch { showAlert("Hata oluştu."); }
+                });
+            });
+        }
+    } catch {
+        container.innerHTML = '<p style="color:var(--color-danger);padding:20px;">Bağlantı hatası.</p>';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// THEME TOGGLE
+// ═══════════════════════════════════════════════════════════════
 function setupThemeToggle() {
     const themeToggle = document.getElementById('theme-toggle');
     if (!themeToggle) return;
-    
     const toggleTheme = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
         document.body.classList.toggle('dark-theme');
-        
         const themeIcon = themeToggle.querySelector('i');
         if (themeIcon) {
             if (document.body.classList.contains('dark-theme')) {
@@ -783,16 +1067,26 @@ function setupThemeToggle() {
             }
         }
     };
-    
     themeToggle.addEventListener('click', toggleTheme);
-    
-    // Initial icon check
     const themeIcon = themeToggle.querySelector('i');
     if (themeIcon) {
-        if (document.body.classList.contains('dark-theme')) {
-            themeIcon.className = "ph ph-sun";
-        } else {
-            themeIcon.className = "ph ph-moon";
-        }
+        themeIcon.className = document.body.classList.contains('dark-theme') ? "ph ph-sun" : "ph ph-moon";
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+function showAlert(msg) {
+    if (tg.showAlert) tg.showAlert(msg);
+    else alert(msg);
+}
+
+function showConfirm(msg, callback) {
+    if (tg.showConfirm) {
+        tg.showConfirm(msg, callback);
+    } else {
+        const result = confirm(msg);
+        callback(result);
     }
 }
