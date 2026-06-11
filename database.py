@@ -75,6 +75,32 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Payment methods table - admin configurable
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS payment_methods (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT DEFAULT '',
+                icon TEXT DEFAULT 'ph-wallet',
+                color TEXT DEFAULT '#6366f1',
+                is_active BOOLEAN DEFAULT TRUE,
+                sort_order INTEGER DEFAULT 0
+            )
+        ''')
+        # Seed default payment methods if empty
+        pm_count = await conn.fetchval("SELECT COUNT(*) FROM payment_methods")
+        if pm_count == 0:
+            default_methods = [
+                ('Papara', 'Anında Onay', 'ph-wallet', '#FF2B6D', True, 1),
+                ('PayFix', 'Anında Onay', 'ph-device-mobile', '#FFA500', True, 2),
+                ('Kripto Para', 'USDT TRC20', 'ph-currency-btc', '#F7931A', True, 3),
+                ('Havale / EFT', '%5 Bonus Fırsatı', 'ph-bank', '#4CAF50', True, 4),
+            ]
+            for m in default_methods:
+                await conn.execute(
+                    "INSERT INTO payment_methods (name, description, icon, color, is_active, sort_order) VALUES ($1,$2,$3,$4,$5,$6)",
+                    *m
+                )
         # Seed default settings if not exists
         default_settings = [
             ('brand_name', 'SMM Panel'),
@@ -312,3 +338,39 @@ async def reject_payment_request(request_id: int):
     async with db_pool.acquire() as conn:
         await conn.execute("UPDATE payment_requests SET status = 'Reddedildi' WHERE id = $1 AND status = 'Bekliyor'", request_id)
         return True
+
+# ─── PAYMENT METHOD FUNCTIONS ─────────────────────────────────────────────────
+
+async def get_payment_methods(active_only: bool = False):
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        if active_only:
+            rows = await conn.fetch("SELECT * FROM payment_methods WHERE is_active = TRUE ORDER BY sort_order, id")
+        else:
+            rows = await conn.fetch("SELECT * FROM payment_methods ORDER BY sort_order, id")
+        return [dict(r) for r in rows]
+
+async def create_payment_method(name: str, description: str, icon: str, color: str, sort_order: int):
+    if not db_pool: return None
+    async with db_pool.acquire() as conn:
+        method_id = await conn.fetchval(
+            "INSERT INTO payment_methods (name, description, icon, color, sort_order) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+            name, description, icon, color, sort_order
+        )
+        return method_id
+
+async def update_payment_method(method_id: int, name: str, description: str, icon: str, color: str, is_active: bool, sort_order: int):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE payment_methods SET name=$1, description=$2, icon=$3, color=$4, is_active=$5, sort_order=$6 WHERE id=$7",
+            name, description, icon, color, is_active, sort_order, method_id
+        )
+        return result == "UPDATE 1"
+
+async def delete_payment_method(method_id: int):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute("DELETE FROM payment_methods WHERE id = $1", method_id)
+        return result == "DELETE 1"
+

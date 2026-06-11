@@ -211,6 +211,10 @@
                     <i class="ph ph-receipt"></i>
                     <span>Siparişler</span>
                 </button>
+                <button class="admin-tab" data-tab="tab-payment-methods">
+                    <i class="ph ph-credit-card"></i>
+                    <span>Yatırım</span>
+                </button>
                 <button class="admin-tab" data-tab="tab-settings">
                     <i class="ph ph-gear"></i>
                     <span>Ayarlar</span>
@@ -319,6 +323,63 @@
                     <button class="btn-refresh" id="btn-refresh-settings"><i class="ph ph-arrows-clockwise"></i></button>
                 </div>
                 <div id="admin-settings-container">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- TAB 6: Ödeme Yöntemleri -->
+            <div class="admin-tab-content" id="tab-payment-methods">
+                <div class="admin-section-header">
+                    <span>Ödeme Yöntemleri</span>
+                    <button class="btn-add-green" id="btn-show-add-payment-method">
+                        <i class="ph ph-plus"></i> Yeni Ekle
+                    </button>
+                </div>
+
+                <!-- Add/Edit Payment Method Form -->
+                <div class="admin-form-card" id="payment-method-form-card" style="display:none;">
+                    <h4 id="payment-method-form-title">Yeni Ödeme Yöntemi Ekle</h4>
+                    <input type="hidden" id="edit-pm-id">
+                    <div class="admin-form-grid">
+                        <div class="input-group">
+                            <label>Yöntem Adı</label>
+                            <input type="text" id="pm-name" placeholder="Örn: Papara">
+                        </div>
+                        <div class="input-group">
+                            <label>Açıklama</label>
+                            <input type="text" id="pm-description" placeholder="Örn: Anında Onay">
+                        </div>
+                    </div>
+                    <div class="admin-form-grid">
+                        <div class="input-group">
+                            <label>İkon (Phosphor)</label>
+                            <input type="text" id="pm-icon" placeholder="ph-wallet">
+                        </div>
+                        <div class="input-group">
+                            <label>Renk (Hex)</label>
+                            <input type="text" id="pm-color" placeholder="#FF2B6D">
+                        </div>
+                    </div>
+                    <div class="admin-form-grid">
+                        <div class="input-group">
+                            <label>Sıra No</label>
+                            <input type="number" id="pm-sort" placeholder="1" min="0">
+                        </div>
+                        <div class="input-group" id="pm-active-group" style="display:none;">
+                            <label>Durum</label>
+                            <select id="pm-is-active" class="admin-select">
+                                <option value="true">Aktif</option>
+                                <option value="false">Pasif</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin-form-actions">
+                        <button class="btn-cancel-form" id="btn-cancel-pm-form">İptal</button>
+                        <button class="tg-button primary" id="btn-save-pm">Kaydet</button>
+                    </div>
+                </div>
+
+                <div id="admin-payment-methods-list">
                     <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
                 </div>
             </div>

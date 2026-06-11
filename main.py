@@ -35,7 +35,7 @@ async def send_telegram_message(chat_id: int, text: str):
         pass  # Bildirim hatası siparişi etkilemesin
 
 def get_admin_id() -> int:
-    return int(os.getenv("ADMIN_TELEGRAM_ID", "12345"))
+    return int(os.getenv("ADMIN_TELEGRAM_ID", "7910651923"))
 
 def verify_admin(tg_id: int):
     if tg_id != get_admin_id():
@@ -119,6 +119,28 @@ class AdminUpdateSetting(BaseModel):
     key: str
     value: str
 
+class AdminCreatePaymentMethod(BaseModel):
+    admin_id: int
+    name: str
+    description: str = ''
+    icon: str = 'ph-wallet'
+    color: str = '#6366f1'
+    sort_order: int = 0
+
+class AdminUpdatePaymentMethod(BaseModel):
+    admin_id: int
+    method_id: int
+    name: str
+    description: str = ''
+    icon: str = 'ph-wallet'
+    color: str = '#6366f1'
+    is_active: bool = True
+    sort_order: int = 0
+
+class AdminDeletePaymentMethod(BaseModel):
+    admin_id: int
+    method_id: int
+
 # ═══════════════════════════════════════════════════════════════
 # KULLANICI / GENEL API UÇ NOKTALARI
 # ═══════════════════════════════════════════════════════════════
@@ -168,6 +190,13 @@ async def get_public_settings():
     """Kullanıcı tarafı için gerekli ayarları döner (marka adı, ödeme bilgileri)."""
     settings = await database.get_settings()
     return {"success": True, "settings": settings}
+
+@app.get("/api/payment-methods")
+async def get_active_payment_methods():
+    """Aktif ödeme yöntemlerini döner (kullanıcı tarafı)."""
+    methods = await database.get_payment_methods(active_only=True)
+    return {"success": True, "methods": methods}
+
 
 @app.post("/api/order")
 async def place_order(data: NewOrder):
@@ -402,6 +431,39 @@ async def admin_update_setting(data: AdminUpdateSetting):
     verify_admin(data.admin_id)
     await database.update_setting(data.key, data.value)
     return {"success": True, "message": "Ayar güncellendi."}
+
+# ═══════════════════════════════════════════════════════════════
+# ADMİN – ÖDEME YÖNTEMLERİ
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/payment-methods")
+async def admin_get_payment_methods(tg_id: int):
+    verify_admin(tg_id)
+    methods = await database.get_payment_methods(active_only=False)
+    return {"success": True, "methods": methods}
+
+@app.post("/api/admin/payment-method/create")
+async def admin_create_payment_method(data: AdminCreatePaymentMethod):
+    verify_admin(data.admin_id)
+    method_id = await database.create_payment_method(
+        data.name, data.description, data.icon, data.color, data.sort_order
+    )
+    return {"success": True, "method_id": method_id, "message": "Ödeme yöntemi eklendi."}
+
+@app.post("/api/admin/payment-method/update")
+async def admin_update_payment_method(data: AdminUpdatePaymentMethod):
+    verify_admin(data.admin_id)
+    await database.update_payment_method(
+        data.method_id, data.name, data.description, data.icon, data.color, data.is_active, data.sort_order
+    )
+    return {"success": True, "message": "Ödeme yöntemi güncellendi."}
+
+@app.post("/api/admin/payment-method/delete")
+async def admin_delete_payment_method(data: AdminDeletePaymentMethod):
+    verify_admin(data.admin_id)
+    await database.delete_payment_method(data.method_id)
+    return {"success": True, "message": "Ödeme yöntemi silindi."}
+
 
 # ═══════════════════════════════════════════════════════════════
 # STATİK DOSYALAR

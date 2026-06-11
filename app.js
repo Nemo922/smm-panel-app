@@ -53,6 +53,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupDragScroll();
     setupPaymentModal();
     setupAdminPanel();
+    
+    // Ödeme yöntemlerini dinamik olarak yükle
+    await loadPaymentMethodsForFunds();
+
 
     // Global Refresh
     const refreshBtn = document.getElementById('global-refresh-btn');
@@ -64,8 +68,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             
             await loadPublicSettings();
             await loadServicesFromBackend();
-            await checkUserStatus(currentUserData.telegram_id);
             
+            // Admin paneli açıksa mevcut sekmede kal
             if (document.getElementById('view-admin').classList.contains('active')) {
                 const activeTab = document.querySelector('.admin-tab.active');
                 if (activeTab) {
@@ -74,8 +78,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (tabId === 'tab-services') loadAdminServices();
                     if (tabId === 'tab-users') loadAdminUsers();
                     if (tabId === 'tab-orders') loadAdminOrders();
+                    if (tabId === 'tab-payment-methods') loadAdminPaymentMethods();
                     if (tabId === 'tab-settings') loadAdminSettings();
                 }
+            } else {
+                // Normal sayfadaysa kullanıcı verisini güncelle
+                await checkUserStatus(currentUserData.telegram_id);
             }
             
             setTimeout(() => { btn.style.transform = ''; }, 300);
@@ -695,6 +703,7 @@ function setupAdminPanel() {
             else if (tabId === 'tab-services') loadAdminServices();
             else if (tabId === 'tab-users') loadAdminUsers();
             else if (tabId === 'tab-orders') loadAdminOrders();
+            else if (tabId === 'tab-payment-methods') loadAdminPaymentMethods();
             else if (tabId === 'tab-settings') loadAdminSettings();
         });
     });
@@ -716,6 +725,15 @@ function setupAdminPanel() {
 
     // Save user
     document.getElementById('btn-save-user')?.addEventListener('click', saveUser);
+
+    // Payment methods form
+    document.getElementById('btn-show-add-payment-method')?.addEventListener('click', () => {
+        openPaymentMethodForm(null);
+    });
+    document.getElementById('btn-cancel-pm-form')?.addEventListener('click', () => {
+        document.getElementById('payment-method-form-card').style.display = 'none';
+    });
+    document.getElementById('btn-save-pm')?.addEventListener('click', savePaymentMethod);
 }
 
 // ─── PAYMENTS TAB ────────────────────────────────────────────
@@ -767,6 +785,7 @@ async function loadPendingPayments() {
     }
 }
 
+// ─── PAYMENT ACTION MODAL ─────────────────────────────────────
 function openPaymentActionModal(requestId, actionType) {
     document.getElementById('payment-action-id').value = requestId;
     document.getElementById('payment-action-type').value = actionType;
@@ -1188,7 +1207,174 @@ if (btnSubmitCancelOrder) {
     });
 }
 
+
+// ─── PAYMENT METHODS TAB ─────────────────────────────────────
+async function loadAdminPaymentMethods() {
+    const container = document.getElementById('admin-payment-methods-list');
+    if (!container) return;
+    container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/admin/payment-methods?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            container.innerHTML = '';
+            if (data.methods.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Henüz ödeme yöntemi yok.</p>';
+                return;
+            }
+            data.methods.forEach(pm => {
+                const card = document.createElement('div');
+                card.className = 'admin-service-card';
+                const statusBadge = pm.is_active
+                    ? '<span style="color:var(--color-success);font-weight:600;font-size:12px;">● Aktif</span>'
+                    : '<span style="color:var(--color-danger);font-weight:600;font-size:12px;">● Pasif</span>';
+                card.innerHTML = `
+                    <div class="admin-service-info">
+                        <div class="service-icon" style="width:36px;height:36px;font-size:18px;flex-shrink:0;background:${pm.color}22;color:${pm.color};">
+                            <i class="ph ${pm.icon}"></i>
+                        </div>
+                        <div>
+                            <div class="admin-service-name">${pm.name}</div>
+                            <div class="admin-service-meta">${pm.description} · Sıra: ${pm.sort_order} · ${statusBadge}</div>
+                        </div>
+                    </div>
+                    <div class="admin-service-actions">
+                        <button class="btn-edit-pm" data-id="${pm.id}" style="background:var(--tg-button-color);color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button class="btn-delete-pm" data-id="${pm.id}" style="background:var(--color-danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            // Edit buttons
+            container.querySelectorAll('.btn-edit-pm').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    const pm = data.methods.find(m => m.id === id);
+                    openPaymentMethodForm(pm);
+                });
+            });
+
+            // Delete buttons
+            container.querySelectorAll('.btn-delete-pm').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    showConfirm("Bu ödeme yöntemini silmek istediğinize emin misiniz?", async (confirmed) => {
+                        if (!confirmed) return;
+                        try {
+                            const res = await fetch('/api/admin/payment-method/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ admin_id: currentUserData.telegram_id, method_id: id })
+                            });
+                            const d = await res.json();
+                            showAlert(d.message || 'Silindi.');
+                            await loadAdminPaymentMethods();
+                            await loadPaymentMethodsForFunds();
+                        } catch { showAlert("Hata oluştu."); }
+                    });
+                });
+            });
+        } else {
+            container.innerHTML = `<p style="color:var(--color-danger);padding:20px;">${data.detail || 'Yüklenemedi'}</p>`;
+        }
+    } catch {
+        container.innerHTML = '<p style="color:var(--color-danger);padding:20px;">Bağlantı hatası.</p>';
+    }
+}
+
+function openPaymentMethodForm(pm) {
+    document.getElementById('payment-method-form-title').textContent = pm ? 'Ödeme Yöntemini Düzenle' : 'Yeni Ödeme Yöntemi Ekle';
+    document.getElementById('edit-pm-id').value = pm ? pm.id : '';
+    document.getElementById('pm-name').value = pm ? pm.name : '';
+    document.getElementById('pm-description').value = pm ? pm.description : '';
+    document.getElementById('pm-icon').value = pm ? pm.icon : 'ph-wallet';
+    document.getElementById('pm-color').value = pm ? pm.color : '#6366f1';
+    document.getElementById('pm-sort').value = pm ? pm.sort_order : 0;
+    // Show active/passive only on edit
+    const activeGroup = document.getElementById('pm-active-group');
+    if (pm) {
+        activeGroup.style.display = 'block';
+        document.getElementById('pm-is-active').value = pm.is_active ? 'true' : 'false';
+    } else {
+        activeGroup.style.display = 'none';
+    }
+    const formCard = document.getElementById('payment-method-form-card');
+    formCard.style.display = 'block';
+    formCard.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function savePaymentMethod() {
+    const pmId = document.getElementById('edit-pm-id').value;
+    const name = document.getElementById('pm-name').value.trim();
+    const description = document.getElementById('pm-description').value.trim();
+    const icon = document.getElementById('pm-icon').value.trim() || 'ph-wallet';
+    const color = document.getElementById('pm-color').value.trim() || '#6366f1';
+    const sortOrder = parseInt(document.getElementById('pm-sort').value) || 0;
+    const isActive = document.getElementById('pm-is-active').value !== 'false';
+
+    if (!name) { showAlert('Yöntem adı boş olamaz.'); return; }
+
+    const btn = document.getElementById('btn-save-pm');
+    btn.disabled = true; btn.textContent = 'Kaydediliyor...';
+    try {
+        let endpoint, body;
+        if (pmId) {
+            endpoint = '/api/admin/payment-method/update';
+            body = { admin_id: currentUserData.telegram_id, method_id: parseInt(pmId), name, description, icon, color, is_active: isActive, sort_order: sortOrder };
+        } else {
+            endpoint = '/api/admin/payment-method/create';
+            body = { admin_id: currentUserData.telegram_id, name, description, icon, color, sort_order: sortOrder };
+        }
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const d = await res.json();
+        document.getElementById('payment-method-form-card').style.display = 'none';
+        await loadAdminPaymentMethods();
+        await loadPaymentMethodsForFunds();
+        showAlert(d.message || '✅ Kaydedildi.');
+    } catch { showAlert("Hata oluştu."); }
+    finally { btn.disabled = false; btn.textContent = 'Kaydet'; }
+}
+
+// Bakiye Yükle sayfasını dinamik ödeme yöntemleriyle güncelle
+async function loadPaymentMethodsForFunds() {
+    try {
+        const res = await fetch('/api/payment-methods');
+        const data = await res.json();
+        if (res.ok && data.success) {
+            const container = document.querySelector('.payment-methods');
+            if (!container) return;
+            container.innerHTML = '';
+            data.methods.forEach(pm => {
+                const card = document.createElement('div');
+                card.className = 'payment-card';
+                card.setAttribute('data-method', pm.name);
+                card.innerHTML = `
+                    <div class="pay-icon" style="background:${pm.color}22;color:${pm.color};"><i class="ph ${pm.icon}"></i></div>
+                    <div class="pay-info">
+                        <h4>${pm.name}</h4>
+                        <p>${pm.description}</p>
+                    </div>
+                    <i class="ph ph-caret-right"></i>
+                `;
+                container.appendChild(card);
+            });
+            // Re-bind payment modal events
+            setupPaymentModal();
+        }
+    } catch { /* Sessiz hata */ }
+}
+
 // ─── SETTINGS TAB ────────────────────────────────────────────
+
 const settingLabels = {
     brand_name: 'Site Adı',
     bank_name: 'Banka Adı',
