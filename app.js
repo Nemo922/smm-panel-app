@@ -560,10 +560,18 @@ function setupPaymentModal() {
                 elDesc.innerHTML = `<b>${cryptoNet} Adresi:</b> <code style="font-size:11px;word-break:break-all">${cryptoAddr}</code><br><br>Lütfen gönderimi tamamladıktan sonra TXID bilgisini yazın.`;
                 lblDetails.textContent = "TXID / Cüzdan Adresiniz";
                 inputPaymentDetails.placeholder = "Örn: e983f...c12a";
+            } else if (selectedPaymentMethod === "Papara") {
+                elDesc.innerHTML = `Papara ile bakiye yüklemek için lütfen Papara numaramıza ödemenizi gerçekleştirin.<br><br>Lütfen gönderimi tamamladıktan sonra Papara adınızı soyadınızı ve gönderim zamanını yazın.`;
+                lblDetails.textContent = "Gönderen Adı Soyadı";
+                inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz";
+            } else if (selectedPaymentMethod === "PayFix") {
+                elDesc.innerHTML = `PayFix ile bakiye yüklemek için lütfen PayFix cüzdanımıza ödemenizi gerçekleştirin.<br><br>Lütfen gönderimi tamamladıktan sonra PayFix hesap numaranızı veya adınızı soyadınızı yazın.`;
+                lblDetails.textContent = "PayFix Hesap No / Ad Soyad";
+                inputPaymentDetails.placeholder = "Örn: 123456789 / Ahmet Yılmaz";
             } else {
-                elDesc.innerHTML = "Manuel Kredi / Banka kartı ödeme bildirim ekranıdır.<br><br>Lütfen ödemeyi yaptıktan sonra ödeme detaylarını ve adınızı soyadınızı yazın.";
-                lblDetails.textContent = "Ödeme Detayları ve İsim";
-                inputPaymentDetails.placeholder = "Örn: Kredi kartı ile 100 TL ödeme yaptım, Ahmet Yılmaz";
+                elDesc.innerHTML = "Lütfen ödemeyi yaptıktan sonra detayları yazın.";
+                lblDetails.textContent = "Ödeme Detayları";
+                inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz";
             }
             paymentModal.classList.add('active');
         });
