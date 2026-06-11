@@ -408,15 +408,15 @@ async def admin_update_setting(data: AdminUpdateSetting):
 
 @app.get("/")
 async def serve_index():
-    return FileResponse("index.html")
+    return FileResponse("index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/style.css")
 async def serve_css():
-    return FileResponse("style.css")
+    return FileResponse("style.css", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 @app.get("/app.js")
 async def serve_js():
-    return FileResponse("app.js")
+    return FileResponse("app.js", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 if __name__ == "__main__":
     import uvicorn
