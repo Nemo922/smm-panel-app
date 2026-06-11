@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SMM Panel - Sosyal Medya Hizmetleri</title>
+    
+    <!-- Telegram WebApp Script -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- Global Header -->
+        <header class="global-header">
+            <div class="brand">
+                <i class="ph-fill ph-rocket-launch"></i>
+                <span>BoostPanel</span>
+            </div>
+            <div class="user-balance">
+                <span class="balance-label">Bakiye</span>
+                <span class="balance-amount">₺245.50</span>
+            </div>
+        </header>
+
+        <!-- VIEW 1: SERVICES (Ana Sayfa) -->
+        <main class="view-section active" id="view-services">
+            
+            <!-- Kategori Seçici (Yatay Scroll) -->
+            <div class="categories-wrapper">
+                <div class="categories-scroll" id="category-list">
+                    <button class="category-chip active" data-cat="all">🔥 Popüler</button>
+                    <button class="category-chip" data-cat="instagram"><i class="ph ph-instagram-logo"></i> Instagram</button>
+                    <button class="category-chip" data-cat="tiktok"><i class="ph ph-tiktok-logo"></i> TikTok</button>
+                    <button class="category-chip" data-cat="twitter"><i class="ph ph-twitter-logo"></i> Twitter</button>
+                    <button class="category-chip" data-cat="youtube"><i class="ph ph-youtube-logo"></i> YouTube</button>
+                </div>
+            </div>
+
+            <!-- Hizmet Kartları Listesi -->
+            <div class="services-list" id="services-container">
+                <!-- JavaScript tarafından dinamik doldurulacak -->
+            </div>
+            
+            <div style="height: 20px;"></div>
+        </main>
+
+        <!-- VIEW 2: ORDERS (Siparişlerim) -->
+        <main class="view-section" id="view-orders">
+            <h2 class="section-title">Sipariş Geçmişim</h2>
+            
+            <div class="orders-list">
+                <!-- Sipariş 1 -->
+                <div class="order-card">
+                    <div class="order-header">
+                        <span class="order-id">#10245</span>
+                        <span class="badge badge-success">Tamamlandı</span>
+                    </div>
+                    <div class="order-body">
+                        <h4>Instagram 1000 Türk Takipçi</h4>
+                        <p class="order-link">@kullaniciadi</p>
+                    </div>
+                    <div class="order-footer">
+                        <span class="order-date">10 Haz 2026</span>
+                        <span class="order-price">₺25.00</span>
+                    </div>
+                </div>
+
+                <!-- Sipariş 2 -->
+                <div class="order-card">
+                    <div class="order-header">
+                        <span class="order-id">#10246</span>
+                        <span class="badge badge-warning">İşlemde</span>
+                    </div>
+                    <div class="order-body">
+                        <h4>TikTok 5000 İzlenme</h4>
+                        <p class="order-link">tiktok.com/@video...</p>
+                    </div>
+                    <div class="order-footer">
+                        <span class="order-date">11 Haz 2026</span>
+                        <span class="order-price">₺5.50</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- VIEW 3: ADD FUNDS (Bakiye Yükle) -->
+        <main class="view-section" id="view-funds">
+            <h2 class="section-title">Bakiye Yükle</h2>
+            
+            <div class="payment-methods">
+                <div class="payment-card">
+                    <div class="pay-icon credit-card"><i class="ph ph-credit-card"></i></div>
+                    <div class="pay-info">
+                        <h4>Kredi / Banka Kartı</h4>
+                        <p>Anında Onay (PayTR)</p>
+                    </div>
+                    <i class="ph ph-caret-right"></i>
+                </div>
+
+                <div class="payment-card">
+                    <div class="pay-icon crypto"><i class="ph ph-currency-btc"></i></div>
+                    <div class="pay-info">
+                        <h4>Kripto Para</h4>
+                        <p>USDT, BTC, ETH</p>
+                    </div>
+                    <i class="ph ph-caret-right"></i>
+                </div>
+
+                <div class="payment-card">
+                    <div class="pay-icon bank"><i class="ph ph-bank"></i></div>
+                    <div class="pay-info">
+                        <h4>Havale / EFT</h4>
+                        <p>%5 Bonus Fırsatı</p>
+                    </div>
+                    <i class="ph ph-caret-right"></i>
+                </div>
+            </div>
+            
+            <div class="bonus-banner">
+                <div class="banner-content">
+                    <h3>🚀 %10 Bonus Kampanyası</h3>
+                    <p>₺500 ve üzeri tüm bakiye yüklemelerinde anında %10 ekstra bonus cüzdanına eklenir.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- VIEW 4: PROFILE (Profil) -->
+        <main class="view-section" id="view-profile">
+            <div class="profile-header-card">
+                <div class="profile-avatar" id="user-avatar">M</div>
+                <h2 id="user-name">Kullanıcı Adı</h2>
+                <p id="user-username">@username</p>
+            </div>
+
+            <div class="profile-stats">
+                <div class="stat-box">
+                    <span class="stat-value">12</span>
+                    <span class="stat-label">Sipariş</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-value">₺350</span>
+                    <span class="stat-label">Harcama</span>
+                </div>
+            </div>
+
+            <div class="menu-list">
+                <a href="#" class="menu-item">
+                    <div class="menu-icon"><i class="ph ph-headset"></i></div>
+                    <span>Destek Talebi Oluştur</span>
+                    <i class="ph ph-caret-right"></i>
+                </a>
+                <a href="#" class="menu-item">
+                    <div class="menu-icon"><i class="ph ph-key"></i></div>
+                    <span>API Bağlantısı</span>
+                    <i class="ph ph-caret-right"></i>
+                </a>
+                <a href="#" class="menu-item">
+                    <div class="menu-icon"><i class="ph ph-scroll"></i></div>
+                    <span>Hizmet Şartları</span>
+                    <i class="ph ph-caret-right"></i>
+                </a>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <a href="#" class="nav-item active" data-target="view-services">
+                <i class="ph-fill ph-storefront"></i>
+                <span>Hizmetler</span>
+            </a>
+            <a href="#" class="nav-item" data-target="view-orders">
+                <i class="ph ph-receipt"></i>
+                <span>Siparişler</span>
+            </a>
+            <a href="#" class="nav-item" data-target="view-funds">
+                <i class="ph ph-wallet"></i>
+                <span>Bakiye</span>
+            </a>
+            <a href="#" class="nav-item" data-target="view-profile">
+                <i class="ph ph-user"></i>
+                <span>Profil</span>
+            </a>
+        </nav>
+
+        <!-- Sipariş Verme Modalı (Gizli) -->
+        <div class="modal-overlay" id="order-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-service-name">Hizmet Adı</h3>
+                    <button class="close-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p class="service-desc" id="modal-service-desc">Hizmet açıklaması burada yer alacak.</p>
+                    
+                    <div class="input-group">
+                        <label for="order-link">Bağlantı (Link / Kullanıcı Adı)</label>
+                        <input type="text" id="order-link" placeholder="Örn: https://instagram.com/p/...">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="order-quantity">Miktar</label>
+                        <input type="number" id="order-quantity" placeholder="Örn: 1000">
+                        <div class="min-max">Min: <span id="modal-min">100</span> - Max: <span id="modal-max">10000</span></div>
+                    </div>
+                    
+                    <div class="price-calc">
+                        <span>Toplam Tutar:</span>
+                        <span class="total-price" id="modal-total-price">₺0.00</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-submit-order">Siparişi Onayla</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Custom Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>
