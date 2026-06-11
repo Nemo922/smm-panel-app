@@ -28,6 +28,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if(tg.setHeaderColor) {
         tg.setHeaderColor('bg_color');
     }
+    
+    // Initialize theme toggle immediately before awaiting network calls
+    setupThemeToggle();
 
     // Default mock user if not in Telegram
     let telegram_id = 12345;
@@ -54,7 +57,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupDragScroll();
     setupPaymentModal();
     setupAdminPanel();
-    setupThemeToggle();
 
     tg.ready();
 });
@@ -730,13 +732,14 @@ async function processPaymentAction(requestId, actionType) {
 // Theme toggler logic
 function setupThemeToggle() {
     const themeToggle = document.getElementById('theme-toggle');
-    const themeIcon = document.getElementById('theme-icon');
+    if (!themeToggle) return;
     
-    if (themeToggle && themeIcon) {
-        themeToggle.addEventListener('click', () => {
-            if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-            document.body.classList.toggle('dark-theme');
-            
+    themeToggle.addEventListener('click', () => {
+        if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        document.body.classList.toggle('dark-theme');
+        
+        const themeIcon = themeToggle.querySelector('i');
+        if (themeIcon) {
             if (document.body.classList.contains('dark-theme')) {
                 themeIcon.className = "ph ph-sun";
                 localStorage.setItem('theme', 'dark');
@@ -744,9 +747,12 @@ function setupThemeToggle() {
                 themeIcon.className = "ph ph-moon";
                 localStorage.setItem('theme', 'light');
             }
-        });
-        
-        // Initial icon check
+        }
+    });
+    
+    // Initial icon check
+    const themeIcon = themeToggle.querySelector('i');
+    if (themeIcon) {
         if (document.body.classList.contains('dark-theme')) {
             themeIcon.className = "ph ph-sun";
         } else {
