@@ -227,6 +227,7 @@ function renderOrders(orders) {
         const status = order.status || 'Bekliyor';
         if (status === 'Tamamlandı') badgeClass = 'badge-success';
         if (status === 'İptal Edildi') badgeClass = 'badge-danger';
+        if (status === 'İşlemde') badgeClass = 'badge-primary';
 
         const srv = smmServices.find(s => s.id === order.service_id);
         const srvName = srv ? srv.name : (order.service_name || `Servis #${order.service_id}`);
@@ -838,11 +839,12 @@ async function saveService() {
             body: JSON.stringify(body)
         });
         const d = await res.json();
-        showAlert(d.message || 'Kaydedildi.');
+        // Close form first, then show alert
         document.getElementById('service-form-card').style.display = 'none';
         await loadAdminServices();
         await loadServicesFromBackend();
         renderServices('all');
+        showAlert(d.message || '✅ Ürün kaydedildi.');
     } catch { showAlert("Hata oluştu."); }
     finally { btn.disabled = false; btn.textContent = "Kaydet"; }
 }
@@ -913,9 +915,10 @@ async function saveUser() {
             body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, balance, first_name: name })
         });
         const d = await res.json();
-        showAlert(d.message || 'Güncellendi.');
+        // Close modal first, then show success
         document.getElementById('user-edit-modal').classList.remove('active');
         await loadAdminUsers();
+        showAlert(d.message || '✅ Kullanıcı güncellendi.');
     } catch { showAlert("Hata oluştu."); }
     finally { btn.disabled = false; btn.textContent = "Kaydet"; }
 }
@@ -937,12 +940,26 @@ async function loadAdminOrders() {
             data.orders.forEach(order => {
                 const card = document.createElement('div');
                 card.className = 'admin-order-card';
-                const statusColors = { 'Tamamlandı': 'var(--color-success)', 'İptal Edildi': 'var(--color-danger)', 'Bekliyor': 'var(--color-warning)' };
+                const statusColors = { 'Tamamlandı': 'var(--color-success)', 'İptal Edildi': 'var(--color-danger)', 'Bekliyor': 'var(--color-warning)', 'İşlemde': 'var(--tg-button-color)' };
                 const color = statusColors[order.status] || 'var(--tg-hint-color)';
+                
+                let statusHtml = '';
+                if (order.status === 'İptal Edildi') {
+                    statusHtml = `<span style="font-size:12px;font-weight:700;color:${color}">${order.status}</span>`;
+                } else {
+                    statusHtml = `
+                        <select class="admin-status-select" data-id="${order.id}" style="color:${color}; border: 1px solid ${color}40;">
+                            <option value="Bekliyor" ${order.status === 'Bekliyor' ? 'selected' : ''}>Bekliyor</option>
+                            <option value="İşlemde" ${order.status === 'İşlemde' ? 'selected' : ''}>İşlemde</option>
+                            <option value="Tamamlandı" ${order.status === 'Tamamlandı' ? 'selected' : ''}>Tamamlandı</option>
+                        </select>
+                    `;
+                }
+
                 card.innerHTML = `
                     <div class="admin-order-header">
                         <span class="admin-order-id">#${order.id}</span>
-                        <span style="font-size:12px;font-weight:700;color:${color}">${order.status}</span>
+                        ${statusHtml}
                     </div>
                     <div class="admin-order-service">${order.service_name || `Servis #${order.service_id}`}</div>
                     <div class="admin-order-meta">👤 ${order.first_name} (@${order.custom_username}) · ${order.quantity.toLocaleString()} adet</div>
@@ -955,6 +972,32 @@ async function loadAdminOrders() {
                 `;
                 container.appendChild(card);
             });
+
+            container.querySelectorAll('.admin-status-select').forEach(select => {
+                select.addEventListener('change', async (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    const newStatus = e.currentTarget.value;
+                    try {
+                        const res = await fetch('/api/admin/order/update-status', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ admin_id: currentUserData.telegram_id, order_id: id, status: newStatus })
+                        });
+                        const d = await res.json();
+                        if (d.success) {
+                            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                            await loadAdminOrders();
+                        } else {
+                            showAlert(d.message || "Güncellenemedi.");
+                            await loadAdminOrders();
+                        }
+                    } catch { 
+                        showAlert("Hata oluştu."); 
+                        await loadAdminOrders();
+                    }
+                });
+            });
+
             container.querySelectorAll('.btn-cancel-order').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const id = parseInt(e.currentTarget.getAttribute('data-id'));
@@ -1022,6 +1065,9 @@ async function loadAdminSettings() {
                     const key = e.currentTarget.getAttribute('data-key');
                     const value = document.getElementById(`setting-${key}`).value.trim();
                     if (!value) { showAlert("Değer boş olamaz."); return; }
+                    const origIcon = e.currentTarget.innerHTML;
+                    e.currentTarget.disabled = true;
+                    e.currentTarget.innerHTML = '<i class="ph ph-spinner"></i>';
                     try {
                         const res = await fetch('/api/admin/settings/update', {
                             method: 'POST',
@@ -1031,12 +1077,23 @@ async function loadAdminSettings() {
                         const d = await res.json();
                         if (d.success) {
                             if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                            // Reload settings and reapply
                             appSettings[key] = value;
                             applySettings(appSettings);
-                            showAlert(`✅ "${settingLabels[key] || key}" güncellendi.`);
+                            // Show checkmark briefly on button
+                            e.currentTarget.innerHTML = '<i class="ph ph-check"></i>';
+                            e.currentTarget.style.background = 'var(--color-success)';
+                            setTimeout(() => {
+                                e.currentTarget.innerHTML = origIcon;
+                                e.currentTarget.style.background = '';
+                                e.currentTarget.disabled = false;
+                            }, 1500);
+                            return; // skip finally re-enable
+                        } else {
+                            showAlert('Hata: Güncellenemedi.');
                         }
                     } catch { showAlert("Hata oluştu."); }
+                    e.currentTarget.innerHTML = origIcon;
+                    e.currentTarget.disabled = false;
                 });
             });
         }
@@ -1083,8 +1140,10 @@ function showAlert(msg) {
 }
 
 function showConfirm(msg, callback) {
-    if (tg.showConfirm) {
-        tg.showConfirm(msg, callback);
+    if (tg.showConfirm && tg.isVersionAtLeast && tg.isVersionAtLeast('6.2')) {
+        tg.showConfirm(msg, function(confirmed) {
+            callback(confirmed);
+        });
     } else {
         const result = confirm(msg);
         callback(result);

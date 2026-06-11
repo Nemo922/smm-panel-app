@@ -1255,8 +1255,22 @@ body.dark-theme .admin-setting-input {
 }
 .btn-save-setting:hover { opacity: 0.85; }
 
-/* ─── BADGE DANGER ───────────────────────────────────────────── */
+/* ─── BADGE DANGER & PRIMARY ─────────────────────────────────── */
 .badge-danger { background: rgba(255, 59, 48, 0.15); color: var(--color-danger); }
+.badge-primary { background: rgba(36, 129, 204, 0.15); color: var(--tg-button-color); }
+
+.admin-status-select {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--tg-secondary-bg-color);
+    outline: none;
+    cursor: pointer;
+}
+body.dark-theme .admin-status-select {
+    background: #1c1c1e;
+}
 
 /* ─── MODAL FOOTER SPACING ───────────────────────────────────── */
 .modal-footer {
