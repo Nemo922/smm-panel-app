@@ -555,31 +555,37 @@ function setupPaymentModal() {
             const elDesc = document.getElementById('modal-payment-desc');
             inputPaymentAmount.value = '';
             inputPaymentDetails.value = '';
-            const bankName = appSettings.bank_name || 'Ziraat Bankası';
-            const bankIban = appSettings.bank_iban || 'TR99 0001 0000 0000 1234 5678 90';
-            const bankRecipient = appSettings.bank_recipient || 'SMM Panel';
+            const bankName = appSettings.bank_name || 'Banka/Hesap';
+            const bankIban = appSettings.bank_iban || 'Hesap numarası bulunmuyor';
+            const bankRecipient = appSettings.bank_recipient || 'Alıcı';
+            
+            // Eğer kartta özel hesap bilgisi varsa onu kullan (yeni özellik)
+            const pmAccountName = card.getAttribute('data-account-name');
+            const pmAccountNumber = card.getAttribute('data-account-number');
+            
+            let displayAccountName = pmAccountName || bankRecipient;
+            let displayAccountNumber = pmAccountNumber || bankIban;
+
+            // Kripto için özel eski ayarlar (geriye dönük uyumluluk)
             const cryptoAddr = appSettings.crypto_usdt_address || 'TY1234567890abcdef1234567890abcdef';
             const cryptoNet = appSettings.crypto_networks || 'USDT TRC20';
-            if (selectedPaymentMethod === "Havale / EFT") {
-                elDesc.innerHTML = `<b>${bankName} IBAN:</b> ${bankIban}<br><b>Alıcı:</b> ${bankRecipient}<br><br>Lütfen transferi tamamladıktan sonra buraya tutar ve gönderen isim soyisminizi yazın.`;
-                lblDetails.textContent = "Gönderen Adı Soyadı";
-                inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz";
-            } else if (selectedPaymentMethod === "Kripto Para") {
+
+            if (selectedPaymentMethod === "Kripto Para" && !pmAccountNumber) {
                 elDesc.innerHTML = `<b>${cryptoNet} Adresi:</b> <code style="font-size:11px;word-break:break-all">${cryptoAddr}</code><br><br>Lütfen gönderimi tamamladıktan sonra TXID bilgisini yazın.`;
                 lblDetails.textContent = "TXID / Cüzdan Adresiniz";
                 inputPaymentDetails.placeholder = "Örn: e983f...c12a";
-            } else if (selectedPaymentMethod === "Papara") {
-                elDesc.innerHTML = `Papara ile bakiye yüklemek için lütfen Papara numaramıza ödemenizi gerçekleştirin.<br><br>Lütfen gönderimi tamamladıktan sonra Papara adınızı soyadınızı ve gönderim zamanını yazın.`;
-                lblDetails.textContent = "Gönderen Adı Soyadı";
-                inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz";
-            } else if (selectedPaymentMethod === "PayFix") {
-                elDesc.innerHTML = `PayFix ile bakiye yüklemek için lütfen PayFix cüzdanımıza ödemenizi gerçekleştirin.<br><br>Lütfen gönderimi tamamladıktan sonra PayFix hesap numaranızı veya adınızı soyadınızı yazın.`;
-                lblDetails.textContent = "PayFix Hesap No / Ad Soyad";
-                inputPaymentDetails.placeholder = "Örn: 123456789 / Ahmet Yılmaz";
             } else {
-                elDesc.innerHTML = "Lütfen ödemeyi yaptıktan sonra detayları yazın.";
-                lblDetails.textContent = "Ödeme Detayları";
-                inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz";
+                let descHtml = '';
+                if (displayAccountName || displayAccountNumber) {
+                    descHtml = `<div style="background:var(--tg-secondary-bg-color); padding: 12px; border-radius: 8px; margin-bottom: 12px;">`;
+                    if (displayAccountName) descHtml += `<div style="margin-bottom: 6px;"><b>Hesap / Alıcı Adı:</b><br><span style="user-select:all;">${displayAccountName}</span></div>`;
+                    if (displayAccountNumber) descHtml += `<div><b>Hesap No / IBAN / Cüzdan:</b><br><code style="user-select:all; font-size: 14px; color: var(--tg-button-color); word-break: break-all;">${displayAccountNumber}</code></div>`;
+                    descHtml += `</div>`;
+                }
+                descHtml += `Lütfen transferi tamamladıktan sonra tutar ve gönderen isim soyisminizi / hesap no bilginizi yazın.`;
+                elDesc.innerHTML = descHtml;
+                lblDetails.textContent = "Gönderen Bilgisi / Detay";
+                inputPaymentDetails.placeholder = "Örn: Ahmet Yılmaz veya TR123...";
             }
             paymentModal.classList.add('active');
         });
@@ -1295,6 +1301,8 @@ function openPaymentMethodForm(pm) {
     document.getElementById('pm-icon').value = pm ? pm.icon : 'ph-wallet';
     document.getElementById('pm-color').value = pm ? pm.color : '#6366f1';
     document.getElementById('pm-sort').value = pm ? pm.sort_order : 0;
+    document.getElementById('pm-account-name').value = pm ? (pm.account_name || '') : '';
+    document.getElementById('pm-account-number').value = pm ? (pm.account_number || '') : '';
     // Show active/passive only on edit
     const activeGroup = document.getElementById('pm-active-group');
     if (pm) {
@@ -1315,6 +1323,8 @@ async function savePaymentMethod() {
     const icon = document.getElementById('pm-icon').value.trim() || 'ph-wallet';
     const color = document.getElementById('pm-color').value.trim() || '#6366f1';
     const sortOrder = parseInt(document.getElementById('pm-sort').value) || 0;
+    const accountName = document.getElementById('pm-account-name').value.trim();
+    const accountNumber = document.getElementById('pm-account-number').value.trim();
     const isActive = document.getElementById('pm-is-active').value !== 'false';
 
     if (!name) { showAlert('Yöntem adı boş olamaz.'); return; }
@@ -1325,10 +1335,10 @@ async function savePaymentMethod() {
         let endpoint, body;
         if (pmId) {
             endpoint = '/api/admin/payment-method/update';
-            body = { admin_id: currentUserData.telegram_id, method_id: parseInt(pmId), name, description, icon, color, is_active: isActive, sort_order: sortOrder };
+            body = { admin_id: currentUserData.telegram_id, method_id: parseInt(pmId), name, description, icon, color, is_active: isActive, sort_order: sortOrder, account_name: accountName, account_number: accountNumber };
         } else {
             endpoint = '/api/admin/payment-method/create';
-            body = { admin_id: currentUserData.telegram_id, name, description, icon, color, sort_order: sortOrder };
+            body = { admin_id: currentUserData.telegram_id, name, description, icon, color, sort_order: sortOrder, account_name: accountName, account_number: accountNumber };
         }
         const res = await fetch(endpoint, {
             method: 'POST',
@@ -1357,6 +1367,8 @@ async function loadPaymentMethodsForFunds() {
                 const card = document.createElement('div');
                 card.className = 'payment-card';
                 card.setAttribute('data-method', pm.name);
+                if (pm.account_name) card.setAttribute('data-account-name', pm.account_name);
+                if (pm.account_number) card.setAttribute('data-account-number', pm.account_number);
                 card.innerHTML = `
                     <div class="pay-icon" style="background:${pm.color}22;color:${pm.color};"><i class="ph ${pm.icon}"></i></div>
                     <div class="pay-info">

@@ -126,6 +126,8 @@ class AdminCreatePaymentMethod(BaseModel):
     icon: str = 'ph-wallet'
     color: str = '#6366f1'
     sort_order: int = 0
+    account_name: str = ''
+    account_number: str = ''
 
 class AdminUpdatePaymentMethod(BaseModel):
     admin_id: int
@@ -136,6 +138,8 @@ class AdminUpdatePaymentMethod(BaseModel):
     color: str = '#6366f1'
     is_active: bool = True
     sort_order: int = 0
+    account_name: str = ''
+    account_number: str = ''
 
 class AdminDeletePaymentMethod(BaseModel):
     admin_id: int
@@ -446,7 +450,7 @@ async def admin_get_payment_methods(tg_id: int):
 async def admin_create_payment_method(data: AdminCreatePaymentMethod):
     verify_admin(data.admin_id)
     method_id = await database.create_payment_method(
-        data.name, data.description, data.icon, data.color, data.sort_order
+        data.name, data.description, data.icon, data.color, data.sort_order, data.account_name, data.account_number
     )
     return {"success": True, "method_id": method_id, "message": "Ödeme yöntemi eklendi."}
 
@@ -454,7 +458,7 @@ async def admin_create_payment_method(data: AdminCreatePaymentMethod):
 async def admin_update_payment_method(data: AdminUpdatePaymentMethod):
     verify_admin(data.admin_id)
     await database.update_payment_method(
-        data.method_id, data.name, data.description, data.icon, data.color, data.is_active, data.sort_order
+        data.method_id, data.name, data.description, data.icon, data.color, data.is_active, data.sort_order, data.account_name, data.account_number
     )
     return {"success": True, "message": "Ödeme yöntemi güncellendi."}
 

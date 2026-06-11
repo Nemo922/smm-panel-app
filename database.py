@@ -87,6 +87,15 @@ async def init_db():
                 sort_order INTEGER DEFAULT 0
             )
         ''')
+        # Add account fields safely if they don't exist
+        try:
+            await conn.execute('ALTER TABLE payment_methods ADD COLUMN account_name TEXT DEFAULT \'\'')
+        except Exception:
+            pass
+        try:
+            await conn.execute('ALTER TABLE payment_methods ADD COLUMN account_number TEXT DEFAULT \'\'')
+        except Exception:
+            pass
         # Seed default payment methods if empty
         pm_count = await conn.fetchval("SELECT COUNT(*) FROM payment_methods")
         if pm_count == 0:
@@ -236,7 +245,8 @@ async def cancel_order(order_id: int):
                     "UPDATE users SET balance = balance + $1 WHERE telegram_id = $2",
                     row['price'], row['user_id']
                 )
-        return True
+        return {'refund': row['price'] if row['price'] else 0.0, 'user_id': row['user_id']}
+
 
 async def update_order_status(order_id: int, status: str):
     if not db_pool: return False
@@ -350,21 +360,22 @@ async def get_payment_methods(active_only: bool = False):
             rows = await conn.fetch("SELECT * FROM payment_methods ORDER BY sort_order, id")
         return [dict(r) for r in rows]
 
-async def create_payment_method(name: str, description: str, icon: str, color: str, sort_order: int):
+async def create_payment_method(name: str, description: str, icon: str, color: str, sort_order: int, account_name: str = '', account_number: str = ''):
     if not db_pool: return None
     async with db_pool.acquire() as conn:
-        method_id = await conn.fetchval(
-            "INSERT INTO payment_methods (name, description, icon, color, sort_order) VALUES ($1,$2,$3,$4,$5) RETURNING id",
-            name, description, icon, color, sort_order
+        return await conn.fetchval(
+            """INSERT INTO payment_methods (name, description, icon, color, sort_order, account_name, account_number)
+               VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id""",
+            name, description, icon, color, sort_order, account_name, account_number
         )
-        return method_id
 
-async def update_payment_method(method_id: int, name: str, description: str, icon: str, color: str, is_active: bool, sort_order: int):
+async def update_payment_method(method_id: int, name: str, description: str, icon: str, color: str, is_active: bool, sort_order: int, account_name: str = '', account_number: str = ''):
     if not db_pool: return False
     async with db_pool.acquire() as conn:
         result = await conn.execute(
-            "UPDATE payment_methods SET name=$1, description=$2, icon=$3, color=$4, is_active=$5, sort_order=$6 WHERE id=$7",
-            name, description, icon, color, is_active, sort_order, method_id
+            """UPDATE payment_methods SET name=$1, description=$2, icon=$3, color=$4, is_active=$5, sort_order=$6, account_name=$7, account_number=$8
+               WHERE id=$9""",
+            name, description, icon, color, is_active, sort_order, account_name, account_number, method_id
         )
         return result == "UPDATE 1"
 
@@ -372,5 +383,4 @@ async def delete_payment_method(method_id: int):
     if not db_pool: return False
     async with db_pool.acquire() as conn:
         result = await conn.execute("DELETE FROM payment_methods WHERE id = $1", method_id)
-        return result == "DELETE 1"
 
