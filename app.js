@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     setupTabs();
     setupCategoryFilters();
-    setupModal();
+    setupModals();
     setupProfileMenu();
     setupDragScroll();
     setupPaymentModal();
@@ -341,9 +341,50 @@ function setupCategoryFilters() {
     });
 }
 
-// Modal Logic
+// Modals - Close on X button and overlay click
+function setupModals() {
+    // ORDER MODAL
+    const orderModal = document.getElementById('order-modal');
+    const orderCloseBtn = orderModal ? orderModal.querySelector('.close-modal') : null;
+    
+    if (orderCloseBtn) {
+        orderCloseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeModal();
+        });
+    }
+    
+    if (orderModal) {
+        orderModal.addEventListener('click', (e) => {
+            if (e.target === orderModal) {
+                closeModal();
+            }
+        });
+    }
+    
+    // PAYMENT MODAL
+    const paymentModalEl = document.getElementById('payment-modal');
+    const paymentCloseBtn = paymentModalEl ? paymentModalEl.querySelector('.close-modal') : null;
+    
+    if (paymentCloseBtn) {
+        paymentCloseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            paymentModalEl.classList.remove('active');
+            selectedPaymentMethod = null;
+        });
+    }
+    
+    if (paymentModalEl) {
+        paymentModalEl.addEventListener('click', (e) => {
+            if (e.target === paymentModalEl) {
+                paymentModalEl.classList.remove('active');
+                selectedPaymentMethod = null;
+            }
+        });
+    }
+}
+
 const modal = document.getElementById('order-modal');
-const btnCloseModal = document.querySelector('.close-modal');
 const inputQuantity = document.getElementById('order-quantity');
 const inputLink = document.getElementById('order-link');
 const elTotalPrice = document.getElementById('modal-total-price');
@@ -376,7 +417,6 @@ function closeModal() {
     if(tg.MainButton) tg.MainButton.hide();
 }
 
-btnCloseModal.addEventListener('click', closeModal);
 inputQuantity.addEventListener('input', calculatePrice);
 
 function calculatePrice() {
@@ -506,7 +546,6 @@ function setupDragScroll() {
 // Payment modal management
 let selectedPaymentMethod = null;
 const paymentModal = document.getElementById('payment-modal');
-const btnClosePaymentModal = document.getElementById('close-payment-modal');
 const inputPaymentAmount = document.getElementById('payment-amount');
 const inputPaymentDetails = document.getElementById('payment-details');
 const btnSubmitPayment = document.getElementById('btn-submit-payment');
@@ -547,13 +586,6 @@ function setupPaymentModal() {
             paymentModal.classList.add('active');
         });
     });
-    
-    if (btnClosePaymentModal) {
-        btnClosePaymentModal.addEventListener('click', () => {
-            paymentModal.classList.remove('active');
-            selectedPaymentMethod = null;
-        });
-    }
     
     if (btnSubmitPayment) {
         btnSubmitPayment.addEventListener('click', async () => {
@@ -734,7 +766,9 @@ function setupThemeToggle() {
     const themeToggle = document.getElementById('theme-toggle');
     if (!themeToggle) return;
     
-    themeToggle.addEventListener('click', () => {
+    const toggleTheme = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
         document.body.classList.toggle('dark-theme');
         
@@ -748,7 +782,9 @@ function setupThemeToggle() {
                 localStorage.setItem('theme', 'light');
             }
         }
-    });
+    };
+    
+    themeToggle.addEventListener('click', toggleTheme);
     
     // Initial icon check
     const themeIcon = themeToggle.querySelector('i');
