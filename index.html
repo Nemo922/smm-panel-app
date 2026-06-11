@@ -29,6 +29,10 @@
                 <span id="brand-name">SMM Panel</span>
             </div>
             <div style="display: flex; align-items: center; gap: 14px;">
+                <button id="notifications-toggle" style="background: none; border: none; color: var(--tg-text-color); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; padding: 4px; position: relative;">
+                    <i class="ph ph-bell"></i>
+                    <span id="notifications-badge" style="display: none; position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background: var(--color-danger); border-radius: 50%;"></span>
+                </button>
                 <button id="global-refresh-btn" style="background: none; border: none; color: var(--tg-text-color); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; padding: 4px; transition: transform 0.3s ease;">
                     <i class="ph ph-arrows-clockwise"></i>
                 </button>
@@ -573,6 +577,19 @@
                 </div>
                 <div class="modal-footer">
                     <button class="tg-button primary full-width" id="btn-submit-payment-action">Onayla</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bildirimler Modalı -->
+        <div class="modal-overlay" id="notifications-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Bildirimler</h3>
+                    <button class="close-modal" id="close-notifications-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body" id="notifications-list" style="max-height: 400px; overflow-y: auto;">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Bildiriminiz bulunmamaktadır.</p>
                 </div>
             </div>
         </div>

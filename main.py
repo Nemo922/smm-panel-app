@@ -206,7 +206,21 @@ async def get_active_payment_methods():
     """Aktif ödeme yöntemlerini döner (kullanıcı tarafı)."""
     methods = await database.get_payment_methods(active_only=True)
     return {"success": True, "methods": methods}
+class ReadNotificationsModel(BaseModel):
+    telegram_id: int
 
+@app.get("/api/user/notifications")
+async def get_notifications(tg_id: int):
+    notifications = await database.get_user_notifications(tg_id)
+    for n in notifications:
+        if n.get('created_at'):
+            n['created_at'] = str(n['created_at'])
+    return {"success": True, "notifications": notifications}
+
+@app.post("/api/user/notifications/read")
+async def read_notifications(data: ReadNotificationsModel):
+    await database.mark_notifications_as_read(data.telegram_id)
+    return {"success": True}
 
 @app.post("/api/order")
 async def place_order(data: NewOrder):
@@ -292,10 +306,16 @@ async def admin_approve_payment(data: AdminAction):
     success = await database.approve_payment_request(data.request_id)
     if success:
         if req:
-            msg = f"✅ <b>Bakiye Yüklendi!</b>\n\n₺{req['amount']:.2f} bakiyeniz onaylandı ve hesabınıza eklendi."
-            if data.note:
-                msg += f"\n\n📝 <b>Not:</b> <i>{html.escape(data.note)}</i>"
-            await send_telegram_message(req['user_id'], msg)
+            # Save details in database notifications
+            note_str = f" Not: {data.note}" if data.note else ""
+            await database.create_notification(
+                req['user_id'], 
+                "Ödemeniz Onaylandı", 
+                f"₺{req['amount']:.2f} tutarındaki ödemeniz onaylandı ve hesabınıza yüklendi.{note_str}"
+            )
+            # Send generic message to Telegram
+            tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+            await send_telegram_message(req['user_id'], tg_msg)
         return {"success": True, "message": "Ödeme onaylandı ve bakiye eklendi."}
     return {"success": False, "message": "İşlem başarısız veya zaten onaylanmış."}
 
@@ -307,10 +327,16 @@ async def admin_reject_payment(data: AdminAction):
     success = await database.reject_payment_request(data.request_id)
     if success:
         if req:
-            msg = f"❌ <b>Bakiye Yükleme Talebiniz Reddedildi</b>\n\nTutar: ₺{req['amount']:.2f}"
-            if data.note:
-                msg += f"\n\n📝 <b>Not:</b> <i>{html.escape(data.note)}</i>"
-            await send_telegram_message(req['user_id'], msg)
+            # Save details in database notifications
+            note_str = f" Not: {data.note}" if data.note else ""
+            await database.create_notification(
+                req['user_id'], 
+                "Ödemeniz Reddedildi", 
+                f"₺{req['amount']:.2f} tutarındaki ödemeniz reddedildi.{note_str}"
+            )
+            # Send generic message to Telegram
+            tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+            await send_telegram_message(req['user_id'], tg_msg)
         return {"success": True, "message": "Ödeme bildirimi reddedildi."}
     return {"success": False, "message": "İşlem başarısız veya zaten işlenmiş."}
 
@@ -387,13 +413,17 @@ async def admin_add_balance(data: AdminAddBalance):
     user = await database.get_user(data.telegram_id)
     new_balance = user['balance'] if user else 0.0
     
-    msg = (
-        f"💰 <b>Bakiyeniz Güncellendi!</b>\n\n"
-        f"Hesabınıza <b>₺{data.amount:.2f}</b> eklendi.\n"
-        f"Güncel Bakiye: ₺{new_balance:.2f}\n\n"
-        f"📝 <b>Yönetici Notu:</b> <i>{html.escape(data.note)}</i>"
+    # Save details in database notifications
+    note_str = f" Not: {data.note}" if data.note else ""
+    await database.create_notification(
+        data.telegram_id, 
+        "Bakiye Eklendi", 
+        f"Hesabınıza ₺{data.amount:.2f} eklendi. Güncel Bakiyeniz: ₺{new_balance:.2f}.{note_str}"
     )
-    await send_telegram_message(data.telegram_id, msg)
+    
+    # Send generic message to Telegram
+    tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+    await send_telegram_message(data.telegram_id, tg_msg)
     
     return {"success": True, "message": f"Bakiye eklendi ve kullanıcıya mesaj gönderildi."}
 
@@ -415,10 +445,16 @@ async def admin_cancel_order(data: AdminOrderAction):
     verify_admin(data.admin_id)
     result = await database.cancel_order(data.order_id, data.note)
     if result:
-        msg = f"❌ <b>Siparişiniz İptal Edildi</b>\n\nSipariş #{data.order_id} iptal edildi ve ₺{result['refund']:.2f} bakiyenize iade edildi."
-        if data.note:
-            msg += f"\n\n📝 <b>Not:</b> <i>{html.escape(data.note)}</i>"
-        await send_telegram_message(result['user_id'], msg)
+        # Save details in database notifications
+        note_str = f" Not: {data.note}" if data.note else ""
+        await database.create_notification(
+            result['user_id'], 
+            f"Sipariş İptal Edildi #{data.order_id}", 
+            f"Sipariş #{data.order_id} iptal edildi ve ₺{result['refund']:.2f} bakiyenize iade edildi.{note_str}"
+        )
+        # Send generic message to Telegram
+        tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+        await send_telegram_message(result['user_id'], tg_msg)
         return {"success": True, "message": "Sipariş iptal edildi ve bakiye iade edildi."}
     return {"success": False, "message": "Sipariş bulunamadı veya zaten iptal edilmiş."}
 

@@ -54,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupDragScroll();
     setupPaymentModal();
     setupAdminPanel();
+    setupNotifications();
     
     // Ödeme yöntemlerini dinamik olarak yükle
     await loadPaymentMethodsForFunds();
@@ -160,6 +161,7 @@ async function checkUserStatus(tg_id) {
             updateDashboardUI(data.user, data.orders);
             renderOrders(data.orders);
             renderServices('all');
+            await loadNotifications();
 
             const menuAdmin = document.getElementById('menu-admin');
             if (data.is_admin) {
@@ -515,9 +517,8 @@ const submitOrder = async () => {
         });
         const data = await response.json();
         if (response.ok && data.success) {
-            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-            showAlert("✅ Siparişiniz başarıyla oluşturuldu!");
             closeModal();
+            showToast("✅ Siparişiniz alındı!");
             await checkUserStatus(currentUserData.telegram_id);
             document.querySelector('[data-target="view-orders"]').click();
         } else {
@@ -1581,5 +1582,106 @@ function showConfirm(msg, callback) {
     } else {
         const result = confirm(msg);
         callback(result);
+    }
+}
+
+function showToast(message, duration = 1000) {
+    let toast = document.getElementById('custom-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'custom-toast';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, duration);
+}
+
+function setupNotifications() {
+    const notifToggle = document.getElementById('notifications-toggle');
+    const notifModal = document.getElementById('notifications-modal');
+    const closeNotifModal = document.getElementById('close-notifications-modal');
+    
+    if (notifToggle && notifModal) {
+        notifToggle.addEventListener('click', async () => {
+            notifModal.classList.add('active');
+            await loadNotifications();
+            await markNotificationsAsRead();
+        });
+    }
+    if (closeNotifModal && notifModal) {
+        closeNotifModal.addEventListener('click', () => {
+            notifModal.classList.remove('active');
+        });
+    }
+    notifModal?.addEventListener('click', (e) => {
+        if (e.target === notifModal) {
+            notifModal.classList.remove('active');
+        }
+    });
+}
+
+async function loadNotifications() {
+    try {
+        const res = await fetch(`/api/user/notifications?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            const list = document.getElementById('notifications-list');
+            const badge = document.getElementById('notifications-badge');
+            if (!list) return;
+            
+            list.innerHTML = '';
+            const unreadCount = data.notifications.filter(n => !n.is_read).length;
+            
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+            
+            if (data.notifications.length === 0) {
+                list.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Bildiriminiz bulunmamaktadır.</p>';
+                return;
+            }
+            
+            data.notifications.forEach(n => {
+                const card = document.createElement('div');
+                card.className = `notification-card ${n.is_read ? '' : 'unread'}`;
+                
+                const ndate = new Date(n.created_at);
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="notification-title">${n.title}</span>
+                        <span class="notification-time">${ndate.toLocaleDateString('tr-TR')} ${ndate.toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <span class="notification-message">${n.message}</span>
+                `;
+                list.appendChild(card);
+            });
+        }
+    } catch (err) {
+        console.error("Bildirimler yüklenemedi:", err);
+    }
+}
+
+async function markNotificationsAsRead() {
+    try {
+        await fetch('/api/user/notifications/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegram_id: currentUserData.telegram_id })
+        });
+        const badge = document.getElementById('notifications-badge');
+        if (badge) badge.style.display = 'none';
+        
+        document.querySelectorAll('.notification-card.unread').forEach(c => c.classList.remove('unread'));
+    } catch (err) {
+        console.error("Bildirimler okundu işaretlenemedi:", err);
     }
 }

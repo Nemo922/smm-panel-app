@@ -1299,3 +1299,60 @@ body.dark-theme .admin-status-select {
     border-top: 1px solid var(--glass-border);
     margin-top: 4px;
 }
+
+/* ─── NOTIFICATIONS & TOAST ───────────────────────────────────── */
+.notification-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background 0.2s;
+}
+.notification-card.unread {
+    border-left: 3px solid var(--tg-button-color);
+}
+.notification-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--tg-text-color);
+}
+.notification-message {
+    font-size: 12px;
+    color: var(--tg-text-color);
+    opacity: 0.85;
+    line-height: 1.4;
+}
+.notification-time {
+    font-size: 10px;
+    color: var(--tg-hint-color);
+    align-self: flex-end;
+    margin-top: 2px;
+}
+
+#custom-toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translate(-50%, 20px);
+    background: rgba(20, 20, 22, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 10000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+#custom-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}

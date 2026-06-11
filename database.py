@@ -49,6 +49,16 @@ async def init_db():
         except Exception:
             pass
         await conn.execute('''
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(telegram_id),
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        await conn.execute('''
             CREATE TABLE IF NOT EXISTS payment_requests (
                 id SERIAL PRIMARY KEY,
                 user_id BIGINT REFERENCES users(telegram_id),
@@ -413,4 +423,32 @@ async def delete_payment_method(method_id: int):
     if not db_pool: return False
     async with db_pool.acquire() as conn:
         result = await conn.execute("DELETE FROM payment_methods WHERE id = $1", method_id)
+
+# ─── NOTIFICATION FUNCTIONS ──────────────────────────────────────────────────
+
+async def create_notification(user_id: int, title: str, message: str):
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+            user_id, title, message
+        )
+
+async def get_user_notifications(telegram_id: int):
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50",
+            telegram_id
+        )
+        return [dict(r) for r in rows]
+
+async def mark_notifications_as_read(telegram_id: int):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE notifications SET is_read = TRUE WHERE user_id = $1",
+            telegram_id
+        )
+        return True
 
