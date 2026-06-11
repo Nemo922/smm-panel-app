@@ -79,6 +79,8 @@ async def register_user(data: RegisterUser):
     user = await database.get_user(data.telegram_id)
     if not user:
         await database.create_user(data.telegram_id, data.first_name, data.username, data.custom_username)
+    else:
+        await database.update_custom_username(data.telegram_id, data.custom_username)
     return {"success": True, "message": "Kayıt başarılı"}
 
 @app.post("/api/order")

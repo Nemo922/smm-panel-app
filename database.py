@@ -135,3 +135,11 @@ async def reject_payment_request(request_id: int):
     async with db_pool.acquire() as conn:
         await conn.execute("UPDATE payment_requests SET status = 'Reddedildi' WHERE id = $1 AND status = 'Bekliyor'", request_id)
         return True
+
+async def update_custom_username(telegram_id: int, custom_username: str):
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET custom_username = $1 WHERE telegram_id = $2",
+            custom_username, telegram_id
+        )

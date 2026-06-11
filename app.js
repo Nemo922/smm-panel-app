@@ -17,8 +17,12 @@ const smmServices = [
 document.addEventListener("DOMContentLoaded", async () => {
     tg.expand();
 
-    if (tg.colorScheme === 'dark') {
+    // Check saved theme or Telegram theme preference
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && tg.colorScheme === 'dark')) {
         document.body.classList.add('dark-theme');
+    } else {
+        document.body.classList.remove('dark-theme');
     }
     
     if(tg.setHeaderColor) {
@@ -50,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupDragScroll();
     setupPaymentModal();
     setupAdminPanel();
+    setupThemeToggle();
 
     tg.ready();
 });
@@ -61,6 +66,17 @@ async function checkUserStatus(tg_id) {
         const data = await response.json();
 
         if (data.registered) {
+            // Check if user has chosen a custom_username, if not, force them to set one
+            if (!data.user.custom_username) {
+                document.body.classList.add('hide-nav'); // Hide bottom nav
+                showView('view-register');
+                document.getElementById('register-welcome').textContent = `Kullanıcı Adı Seçin, ${currentUserData.first_name}!`;
+                document.getElementById('btn-register').onclick = async () => {
+                    await registerUser(currentUserData);
+                };
+                return;
+            }
+
             // User is registered, go to Dashboard
             updateDashboardUI(data.user, data.orders);
             renderOrders(data.orders);
@@ -708,5 +724,33 @@ async function processPaymentAction(requestId, actionType) {
     } catch(e) {
         if (tg.showAlert) tg.showAlert("Sunucuyla bağlantı kurulamadı.");
         else alert("Sunucuyla bağlantı kurulamadı.");
+    }
+}
+
+// Theme toggler logic
+function setupThemeToggle() {
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeIcon = document.getElementById('theme-icon');
+    
+    if (themeToggle && themeIcon) {
+        themeToggle.addEventListener('click', () => {
+            if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            document.body.classList.toggle('dark-theme');
+            
+            if (document.body.classList.contains('dark-theme')) {
+                themeIcon.className = "ph ph-sun";
+                localStorage.setItem('theme', 'dark');
+            } else {
+                themeIcon.className = "ph ph-moon";
+                localStorage.setItem('theme', 'light');
+            }
+        });
+        
+        // Initial icon check
+        if (document.body.classList.contains('dark-theme')) {
+            themeIcon.className = "ph ph-sun";
+        } else {
+            themeIcon.className = "ph ph-moon";
+        }
     }
 }
