@@ -29,6 +29,9 @@
                 <span id="brand-name">SMM Panel</span>
             </div>
             <div style="display: flex; align-items: center; gap: 14px;">
+                <button id="global-refresh-btn" style="background: none; border: none; color: var(--tg-text-color); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; padding: 4px; transition: transform 0.3s ease;">
+                    <i class="ph ph-arrows-clockwise"></i>
+                </button>
                 <button id="theme-toggle" style="background: none; border: none; color: var(--tg-text-color); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; padding: 4px;">
                     <i class="ph ph-moon" id="theme-icon"></i>
                 </button>
@@ -414,6 +417,76 @@
                 </div>
                 <div class="modal-footer">
                     <button class="tg-button primary full-width" id="btn-save-user">Kaydet</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bakiye Ekle Modalı (Admin) -->
+        <div class="modal-overlay" id="admin-add-balance-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Bakiye Ekle & Bildir</h3>
+                    <button class="close-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="add-balance-tg-id">
+                    <p id="add-balance-user-name" style="font-weight:600; margin-bottom:12px; color:var(--tg-text-color);"></p>
+                    
+                    <div class="input-group">
+                        <label>Eklenecek Tutar (₺)</label>
+                        <input type="number" id="add-balance-amount" placeholder="Örn: 100" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label>Ekleme Nedeni / Not (Üyeye İletilecek)</label>
+                        <textarea class="admin-select" id="add-balance-note" placeholder="Örn: Banka havalesi onaylandı. İyi günlerde kullanın." rows="3" style="resize: none;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-submit-add-balance" style="background:var(--color-success)">Bakiyeyi Ekle ve Bildir</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sipariş İptal Modalı (Admin) -->
+        <div class="modal-overlay" id="admin-cancel-order-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Siparişi İptal Et</h3>
+                    <button class="close-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="cancel-order-id">
+                    <p style="margin-bottom:12px; color:var(--tg-text-color);">Bu siparişi iptal edip kullanıcının bakiyesini iade edeceksiniz.</p>
+                    <div class="input-group">
+                        <label>İptal Nedeni / Kullanıcıya Not</label>
+                        <textarea class="admin-select" id="cancel-order-note" placeholder="Örn: Servis sağlayıcı geçici olarak çalışmıyor." rows="3" style="resize: none;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-submit-cancel-order" style="background:var(--color-danger)">İptal Et ve Bildir</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ödeme İşlemi Modalı (Admin) -->
+        <div class="modal-overlay" id="admin-payment-action-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="payment-action-title">Ödeme İşlemi</h3>
+                    <button class="close-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="payment-action-id">
+                    <input type="hidden" id="payment-action-type">
+                    <p id="payment-action-desc" style="margin-bottom:12px; color:var(--tg-text-color); font-weight:600;"></p>
+                    <div class="input-group">
+                        <label>Kullanıcıya İletilecek Not (İsteğe Bağlı)</label>
+                        <textarea class="admin-select" id="payment-action-note" placeholder="Örn: İşleminiz başarıyla gerçekleşti." rows="3" style="resize: none;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-submit-payment-action">Onayla</button>
                 </div>
             </div>
         </div>

@@ -54,6 +54,34 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupPaymentModal();
     setupAdminPanel();
 
+    // Global Refresh
+    const refreshBtn = document.getElementById('global-refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            btn.style.transform = 'rotate(360deg)';
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            
+            await loadPublicSettings();
+            await loadServicesFromBackend();
+            await checkUserStatus(currentUserData.telegram_id);
+            
+            if (document.getElementById('view-admin').classList.contains('active')) {
+                const activeTab = document.querySelector('.admin-tab.active');
+                if (activeTab) {
+                    const tabId = activeTab.getAttribute('data-tab');
+                    if (tabId === 'tab-payments') loadPendingPayments();
+                    if (tabId === 'tab-services') loadAdminServices();
+                    if (tabId === 'tab-users') loadAdminUsers();
+                    if (tabId === 'tab-orders') loadAdminOrders();
+                    if (tabId === 'tab-settings') loadAdminSettings();
+                }
+            }
+            
+            setTimeout(() => { btn.style.transform = ''; }, 300);
+        });
+    }
+
     tg.ready();
 });
 
@@ -374,6 +402,30 @@ function setupModals() {
             if (e.target === userEditModal) userEditModal.classList.remove('active');
         });
     }
+
+    const addBalanceModal = document.getElementById('admin-add-balance-modal');
+    const addBalanceCloseBtn = addBalanceModal ? addBalanceModal.querySelector('.close-modal') : null;
+    if (addBalanceCloseBtn) {
+        addBalanceCloseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addBalanceModal.classList.remove('active');
+        });
+    }
+    if (addBalanceModal) {
+        addBalanceModal.addEventListener('click', (e) => {
+            if (e.target === addBalanceModal) addBalanceModal.classList.remove('active');
+        });
+    }
+
+    const cancelOrderModal = document.getElementById('admin-cancel-order-modal');
+    const cancelOrderCloseBtn = cancelOrderModal ? cancelOrderModal.querySelector('.close-modal') : null;
+    if (cancelOrderCloseBtn) cancelOrderCloseBtn.addEventListener('click', () => cancelOrderModal.classList.remove('active'));
+    if (cancelOrderModal) cancelOrderModal.addEventListener('click', (e) => { if (e.target === cancelOrderModal) cancelOrderModal.classList.remove('active'); });
+
+    const paymentActionModal = document.getElementById('admin-payment-action-modal');
+    const paymentActionCloseBtn = paymentActionModal ? paymentActionModal.querySelector('.close-modal') : null;
+    if (paymentActionCloseBtn) paymentActionCloseBtn.addEventListener('click', () => paymentActionModal.classList.remove('active'));
+    if (paymentActionModal) paymentActionModal.addEventListener('click', (e) => { if (e.target === paymentActionModal) paymentActionModal.classList.remove('active'); });
 }
 
 const modal = document.getElementById('order-modal');
@@ -690,13 +742,13 @@ async function loadPendingPayments() {
                 container.appendChild(card);
             });
             container.querySelectorAll('.btn-approve').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    await processPaymentAction(parseInt(e.currentTarget.getAttribute('data-id')), 'approve');
+                btn.addEventListener('click', (e) => {
+                    openPaymentActionModal(parseInt(e.currentTarget.getAttribute('data-id')), 'approve');
                 });
             });
             container.querySelectorAll('.btn-reject').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    await processPaymentAction(parseInt(e.currentTarget.getAttribute('data-id')), 'reject');
+                btn.addEventListener('click', (e) => {
+                    openPaymentActionModal(parseInt(e.currentTarget.getAttribute('data-id')), 'reject');
                 });
             });
         } else {
@@ -707,21 +759,54 @@ async function loadPendingPayments() {
     }
 }
 
-async function processPaymentAction(requestId, actionType) {
-    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-    const endpoint = actionType === 'approve' ? '/api/admin/approve-payment' : '/api/admin/reject-payment';
-    try {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ admin_id: currentUserData.telegram_id, request_id: requestId })
-        });
-        const data = await response.json();
-        showAlert(data.message || (data.success ? 'İşlem başarılı.' : 'İşlem başarısız.'));
-        if (data.success) await loadPendingPayments();
-    } catch (e) {
-        showAlert("Sunucuyla bağlantı kurulamadı.");
-    }
+function openPaymentActionModal(requestId, actionType) {
+    document.getElementById('payment-action-id').value = requestId;
+    document.getElementById('payment-action-type').value = actionType;
+    document.getElementById('payment-action-note').value = '';
+    
+    const title = actionType === 'approve' ? 'Ödemeyi Onayla' : 'Ödemeyi Reddet';
+    const desc = actionType === 'approve' ? 'Bu işlemi onayladığınızda kullanıcının bakiyesine tutar eklenecektir.' : 'Bu işlemi reddedeceksiniz.';
+    const btnText = actionType === 'approve' ? 'Onayla ve Bildir' : 'Reddet ve Bildir';
+    const btnColor = actionType === 'approve' ? 'var(--color-success)' : 'var(--color-danger)';
+    
+    document.getElementById('payment-action-title').textContent = title;
+    document.getElementById('payment-action-desc').textContent = desc;
+    
+    const btn = document.getElementById('btn-submit-payment-action');
+    btn.textContent = btnText;
+    btn.style.background = btnColor;
+    
+    document.getElementById('admin-payment-action-modal').classList.add('active');
+}
+
+const btnSubmitPaymentAction = document.getElementById('btn-submit-payment-action');
+if (btnSubmitPaymentAction) {
+    btnSubmitPaymentAction.addEventListener('click', async () => {
+        const requestId = parseInt(document.getElementById('payment-action-id').value);
+        const actionType = document.getElementById('payment-action-type').value;
+        const note = document.getElementById('payment-action-note').value.trim();
+        
+        btnSubmitPaymentAction.disabled = true;
+        btnSubmitPaymentAction.textContent = "İşleniyor...";
+        
+        const endpoint = actionType === 'approve' ? '/api/admin/approve-payment' : '/api/admin/reject-payment';
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUserData.telegram_id, request_id: requestId, note: note })
+            });
+            const data = await response.json();
+            
+            document.getElementById('admin-payment-action-modal').classList.remove('active');
+            showAlert(data.message || (data.success ? 'İşlem başarılı.' : 'İşlem başarısız.'));
+            if (data.success) await loadPendingPayments();
+        } catch (e) {
+            showAlert("Sunucuyla bağlantı kurulamadı.");
+        } finally {
+            btnSubmitPaymentAction.disabled = false;
+        }
+    });
 }
 
 // ─── SERVICES TAB ────────────────────────────────────────────
@@ -873,9 +958,14 @@ async function loadAdminUsers() {
                         <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}</div>
                         <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b></div>
                     </div>
-                    <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}">
-                        <i class="ph ph-pencil-simple"></i>
-                    </button>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button class="btn-add-balance" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: rgba(52, 199, 89, 0.12); color: var(--color-success); font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.2s;">
+                            <i class="ph ph-wallet"></i>
+                        </button>
+                    </div>
                 `;
                 container.appendChild(card);
             });
@@ -883,6 +973,12 @@ async function loadAdminUsers() {
                 btn.addEventListener('click', (e) => {
                     const b = e.currentTarget;
                     openUserEditModal(b.dataset.tgid, b.dataset.name, b.dataset.balance);
+                });
+            });
+            container.querySelectorAll('.btn-add-balance').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const b = e.currentTarget;
+                    openAddBalanceModal(b.dataset.tgid, b.dataset.name);
                 });
             });
         } else {
@@ -921,6 +1017,47 @@ async function saveUser() {
         showAlert(d.message || '✅ Kullanıcı güncellendi.');
     } catch { showAlert("Hata oluştu."); }
     finally { btn.disabled = false; btn.textContent = "Kaydet"; }
+}
+
+function openAddBalanceModal(tgId, name) {
+    document.getElementById('add-balance-tg-id').value = tgId;
+    document.getElementById('add-balance-user-name').textContent = `Üye: ${name}`;
+    document.getElementById('add-balance-amount').value = '';
+    document.getElementById('add-balance-note').value = '';
+    document.getElementById('admin-add-balance-modal').classList.add('active');
+}
+
+const btnSubmitAddBalance = document.getElementById('btn-submit-add-balance');
+if (btnSubmitAddBalance) {
+    btnSubmitAddBalance.addEventListener('click', async () => {
+        const tgId = parseInt(document.getElementById('add-balance-tg-id').value);
+        const amount = parseFloat(document.getElementById('add-balance-amount').value) || 0;
+        const note = document.getElementById('add-balance-note').value.trim();
+        
+        if (amount <= 0) { showAlert("Lütfen 0'dan büyük bir tutar girin."); return; }
+        if (!note) { showAlert("Lütfen kullanıcıya iletilecek bir not yazın."); return; }
+        
+        btnSubmitAddBalance.disabled = true;
+        btnSubmitAddBalance.textContent = "Ekleniyor...";
+        
+        try {
+            const res = await fetch('/api/admin/user/add-balance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, amount, note })
+            });
+            const d = await res.json();
+            
+            document.getElementById('admin-add-balance-modal').classList.remove('active');
+            await loadAdminUsers();
+            showAlert(d.message || '✅ Bakiye eklendi ve mesaj gönderildi.');
+        } catch { 
+            showAlert("Hata oluştu."); 
+        } finally { 
+            btnSubmitAddBalance.disabled = false; 
+            btnSubmitAddBalance.textContent = "Bakiyeyi Ekle ve Bildir"; 
+        }
+    });
 }
 
 // ─── ORDERS TAB ──────────────────────────────────────────────
@@ -999,21 +1136,11 @@ async function loadAdminOrders() {
             });
 
             container.querySelectorAll('.btn-cancel-order').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
+                btn.addEventListener('click', (e) => {
                     const id = parseInt(e.currentTarget.getAttribute('data-id'));
-                    showConfirm("Bu siparişi iptal edip bakiyeyi iade etmek istiyor musunuz?", async (confirmed) => {
-                        if (!confirmed) return;
-                        try {
-                            const res = await fetch('/api/admin/order/cancel', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ admin_id: currentUserData.telegram_id, order_id: id })
-                            });
-                            const d = await res.json();
-                            showAlert(d.message);
-                            await loadAdminOrders();
-                        } catch { showAlert("Hata oluştu."); }
-                    });
+                    document.getElementById('cancel-order-id').value = id;
+                    document.getElementById('cancel-order-note').value = '';
+                    document.getElementById('admin-cancel-order-modal').classList.add('active');
                 });
             });
         } else {
@@ -1022,6 +1149,35 @@ async function loadAdminOrders() {
     } catch {
         container.innerHTML = '<p style="color:var(--color-danger);padding:20px;">Bağlantı hatası.</p>';
     }
+}
+
+const btnSubmitCancelOrder = document.getElementById('btn-submit-cancel-order');
+if (btnSubmitCancelOrder) {
+    btnSubmitCancelOrder.addEventListener('click', async () => {
+        const id = parseInt(document.getElementById('cancel-order-id').value);
+        const note = document.getElementById('cancel-order-note').value.trim();
+        
+        btnSubmitCancelOrder.disabled = true;
+        btnSubmitCancelOrder.textContent = "İptal Ediliyor...";
+        
+        try {
+            const res = await fetch('/api/admin/order/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUserData.telegram_id, order_id: id, note: note })
+            });
+            const d = await res.json();
+            
+            document.getElementById('admin-cancel-order-modal').classList.remove('active');
+            showAlert(d.message);
+            await loadAdminOrders();
+        } catch { 
+            showAlert("Hata oluştu."); 
+        } finally {
+            btnSubmitCancelOrder.disabled = false;
+            btnSubmitCancelOrder.textContent = "İptal Et ve Bildir";
+        }
+    });
 }
 
 // ─── SETTINGS TAB ────────────────────────────────────────────

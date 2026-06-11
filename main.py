@@ -63,10 +63,12 @@ class NewPaymentRequest(BaseModel):
 class AdminAction(BaseModel):
     admin_id: int
     request_id: int
+    note: Optional[str] = None
 
 class AdminOrderAction(BaseModel):
     admin_id: int
     order_id: int
+    note: Optional[str] = None
 
 class AdminOrderStatus(BaseModel):
     admin_id: int
@@ -78,6 +80,12 @@ class AdminUpdateUser(BaseModel):
     telegram_id: int
     balance: float
     first_name: str
+
+class AdminAddBalance(BaseModel):
+    admin_id: int
+    telegram_id: int
+    amount: float
+    note: str
 
 class AdminCreateService(BaseModel):
     admin_id: int
@@ -242,18 +250,25 @@ async def admin_approve_payment(data: AdminAction):
     success = await database.approve_payment_request(data.request_id)
     if success:
         if req:
-            await send_telegram_message(
-                req['user_id'],
-                f"✅ <b>Bakiye Yüklendi!</b>\n\n₺{req['amount']:.2f} bakiyeniz onaylandı ve hesabınıza eklendi."
-            )
+            msg = f"✅ <b>Bakiye Yüklendi!</b>\n\n₺{req['amount']:.2f} bakiyeniz onaylandı ve hesabınıza eklendi."
+            if data.note:
+                msg += f"\n\n📝 <b>Not:</b> <i>{data.note}</i>"
+            await send_telegram_message(req['user_id'], msg)
         return {"success": True, "message": "Ödeme onaylandı ve bakiye eklendi."}
     return {"success": False, "message": "İşlem başarısız veya zaten onaylanmış."}
 
 @app.post("/api/admin/reject-payment")
 async def admin_reject_payment(data: AdminAction):
     verify_admin(data.admin_id)
+    reqs = await database.get_pending_payment_requests()
+    req = next((r for r in reqs if r['id'] == data.request_id), None)
     success = await database.reject_payment_request(data.request_id)
     if success:
+        if req:
+            msg = f"❌ <b>Bakiye Yükleme Talebiniz Reddedildi</b>\n\nTutar: ₺{req['amount']:.2f}"
+            if data.note:
+                msg += f"\n\n📝 <b>Not:</b> <i>{data.note}</i>"
+            await send_telegram_message(req['user_id'], msg)
         return {"success": True, "message": "Ödeme bildirimi reddedildi."}
     return {"success": False, "message": "İşlem başarısız veya zaten işlenmiş."}
 
@@ -318,6 +333,28 @@ async def admin_update_user(data: AdminUpdateUser):
     # Always return success since asyncpg UPDATE result checking can vary
     return {"success": True, "message": "Kullanıcı güncellendi."}
 
+@app.post("/api/admin/user/add-balance")
+async def admin_add_balance(data: AdminAddBalance):
+    verify_admin(data.admin_id)
+    if data.amount <= 0:
+        raise HTTPException(status_code=400, detail="Eklenecek tutar 0'dan büyük olmalıdır.")
+    
+    await database.update_balance(data.telegram_id, data.amount)
+    
+    # Kullanıcıya bildirim gönder
+    user = await database.get_user(data.telegram_id)
+    new_balance = user['balance'] if user else 0.0
+    
+    msg = (
+        f"💰 <b>Bakiyeniz Güncellendi!</b>\n\n"
+        f"Hesabınıza <b>₺{data.amount:.2f}</b> eklendi.\n"
+        f"Güncel Bakiye: ₺{new_balance:.2f}\n\n"
+        f"📝 <b>Yönetici Notu:</b> <i>{data.note}</i>"
+    )
+    await send_telegram_message(data.telegram_id, msg)
+    
+    return {"success": True, "message": f"Bakiye eklendi ve kullanıcıya mesaj gönderildi."}
+
 # ═══════════════════════════════════════════════════════════════
 # ADMİN – SİPARİŞ YÖNETİMİ
 # ═══════════════════════════════════════════════════════════════
@@ -334,8 +371,12 @@ async def admin_get_orders(tg_id: int):
 @app.post("/api/admin/order/cancel")
 async def admin_cancel_order(data: AdminOrderAction):
     verify_admin(data.admin_id)
-    success = await database.cancel_order(data.order_id)
-    if success:
+    result = await database.cancel_order(data.order_id)
+    if result:
+        msg = f"❌ <b>Siparişiniz İptal Edildi</b>\n\nSipariş #{data.order_id} iptal edildi ve ₺{result['refund']:.2f} bakiyenize iade edildi."
+        if data.note:
+            msg += f"\n\n📝 <b>Not:</b> <i>{data.note}</i>"
+        await send_telegram_message(result['user_id'], msg)
         return {"success": True, "message": "Sipariş iptal edildi ve bakiye iade edildi."}
     return {"success": False, "message": "Sipariş bulunamadı veya zaten iptal edilmiş."}
 
