@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -17,11 +17,19 @@ app = FastAPI(title="SMM Panel API")
 async def startup_event():
     await database.init_db()
 
-# --- API MODELLERİ ---
+@app.on_event("shutdown")
+async def shutdown_event():
+    if database.db_pool:
+        await database.db_pool.close()
+
+# --- API MODELLERİ (Pydantic v1 uyumlu) ---
 class RegisterUser(BaseModel):
     telegram_id: int
     first_name: str
     username: str
+
+    class Config:
+        orm_mode = True
 
 class NewOrder(BaseModel):
     telegram_id: int
@@ -29,6 +37,9 @@ class NewOrder(BaseModel):
     link: str
     quantity: int
     price: float
+
+    class Config:
+        orm_mode = True
 
 # --- API UÇ NOKTALARI (ENDPOINTS) ---
 
