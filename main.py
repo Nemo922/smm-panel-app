@@ -26,6 +26,7 @@ class RegisterUser(BaseModel):
     telegram_id: int
     first_name: str
     username: str
+    custom_username: str
 
 class NewOrder(BaseModel):
     telegram_id: int
@@ -33,6 +34,16 @@ class NewOrder(BaseModel):
     link: str
     quantity: int
     price: float
+
+class NewPaymentRequest(BaseModel):
+    telegram_id: int
+    amount: float
+    payment_method: str
+    details: str
+
+class AdminAction(BaseModel):
+    admin_id: int
+    request_id: int
 
 # --- API UÇ NOKTALARI ---
 
@@ -46,14 +57,28 @@ async def get_user_data(tg_id: int):
                 o['order_date'] = str(o['order_date'])
         if user.get('joined_date'):
             user['joined_date'] = str(user['joined_date'])
-        return {"registered": True, "user": user, "orders": orders}
+        
+        admin_id = int(os.getenv("ADMIN_TELEGRAM_ID", "12345"))
+        is_admin = (tg_id == admin_id)
+        
+        return {"registered": True, "user": user, "orders": orders, "is_admin": is_admin}
     return {"registered": False}
+
+@app.get("/api/check-username")
+async def check_username(username: str):
+    exists = await database.check_custom_username_exists(username)
+    return {"exists": exists}
 
 @app.post("/api/register")
 async def register_user(data: RegisterUser):
+    # Verify unique custom_username
+    exists = await database.check_custom_username_exists(data.custom_username)
+    if exists:
+        raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış")
+        
     user = await database.get_user(data.telegram_id)
     if not user:
-        await database.create_user(data.telegram_id, data.first_name, data.username)
+        await database.create_user(data.telegram_id, data.first_name, data.username, data.custom_username)
     return {"success": True, "message": "Kayıt başarılı"}
 
 @app.post("/api/order")
@@ -85,6 +110,44 @@ async def place_order(data: NewOrder):
         )
 
     return {"success": True, "message": "Siparişiniz alındı!"}
+
+@app.post("/api/payment-request")
+async def new_payment_request(data: NewPaymentRequest):
+    await database.create_payment_request(data.telegram_id, data.amount, data.payment_method, data.details)
+    return {"success": True, "message": "Ödeme bildiriminiz alındı. Yönetici onayı bekleniyor."}
+
+@app.get("/api/admin/pending-payments")
+async def admin_pending_payments(tg_id: int):
+    admin_id = int(os.getenv("ADMIN_TELEGRAM_ID", "12345"))
+    if tg_id != admin_id:
+        raise HTTPException(status_code=403, detail="Yetkisiz erişim")
+    requests = await database.get_pending_payment_requests()
+    for r in requests:
+        if r.get('request_date'):
+            r['request_date'] = str(r['request_date'])
+    return {"success": True, "requests": requests}
+
+@app.post("/api/admin/approve-payment")
+async def admin_approve_payment(data: AdminAction):
+    admin_id = int(os.getenv("ADMIN_TELEGRAM_ID", "12345"))
+    if data.admin_id != admin_id:
+        raise HTTPException(status_code=403, detail="Yetkisiz erişim")
+        
+    success = await database.approve_payment_request(data.request_id)
+    if success:
+        return {"success": True, "message": "Ödeme onaylandı ve bakiye eklendi."}
+    return {"success": False, "message": "İşlem başarısız veya zaten onaylanmış."}
+
+@app.post("/api/admin/reject-payment")
+async def admin_reject_payment(data: AdminAction):
+    admin_id = int(os.getenv("ADMIN_TELEGRAM_ID", "12345"))
+    if data.admin_id != admin_id:
+        raise HTTPException(status_code=403, detail="Yetkisiz erişim")
+        
+    success = await database.reject_payment_request(data.request_id)
+    if success:
+        return {"success": True, "message": "Ödeme bildirimi reddedildi."}
+    return {"success": False, "message": "İşlem başarısız veya zaten işlenmiş."}
 
 # --- STATİK DOSYALAR ---
 @app.get("/")

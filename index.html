@@ -39,10 +39,17 @@
             <div class="register-container">
                 <div class="welcome-icon"><i class="ph-fill ph-hand-waving"></i></div>
                 <h2 id="register-welcome">Hoş Geldiniz!</h2>
-                <p>Hemen kayıt olun, sosyal medya hesaplarınızı güvenle büyütmeye başlayın.</p>
-                <div class="register-info-box">
+                <p>Sosyal medya hesaplarınızı güvenle büyütmeye başlayın.</p>
+                
+                <div class="input-group" style="width: 100%; text-align: left; margin-bottom: 20px;">
+                    <label for="register-username" style="font-weight: 600; display: block; margin-bottom: 8px;">Kullanıcı Adı Seçin</label>
+                    <input type="text" id="register-username" placeholder="Örn: ahmet123" required>
+                    <small style="color: var(--tg-hint-color); display: block; margin-top: 4px; font-size: 11px;">Sadece İngilizce harfler ve rakamlar kullanılabilir.</small>
+                </div>
+
+                <div class="register-info-box" style="margin-bottom: 20px;">
                     <i class="ph ph-shield-check"></i>
-                    <p>Telegram profil bilgileriniz (İsim ve ID) ile tek tıkla şifresiz giriş yapacaksınız.</p>
+                    <p>Telegram profil bilgileriniz ile tek tıkla şifresiz giriş yapacaksınız.</p>
                 </div>
                 <button class="tg-button primary full-width" id="btn-register">Kayıt Ol ve Giriş Yap</button>
             </div>
@@ -114,16 +121,16 @@
             <h2 class="section-title">Bakiye Yükle</h2>
             
             <div class="payment-methods">
-                <div class="payment-card">
+                <div class="payment-card" data-method="Kredi / Banka Kartı">
                     <div class="pay-icon credit-card"><i class="ph ph-credit-card"></i></div>
                     <div class="pay-info">
                         <h4>Kredi / Banka Kartı</h4>
-                        <p>Anında Onay (PayTR)</p>
+                        <p>Manuel Onay (Yönetici Kontrolü)</p>
                     </div>
                     <i class="ph ph-caret-right"></i>
                 </div>
 
-                <div class="payment-card">
+                <div class="payment-card" data-method="Kripto Para">
                     <div class="pay-icon crypto"><i class="ph ph-currency-btc"></i></div>
                     <div class="pay-info">
                         <h4>Kripto Para</h4>
@@ -132,7 +139,7 @@
                     <i class="ph ph-caret-right"></i>
                 </div>
 
-                <div class="payment-card">
+                <div class="payment-card" data-method="Havale / EFT">
                     <div class="pay-icon bank"><i class="ph ph-bank"></i></div>
                     <div class="pay-info">
                         <h4>Havale / EFT</h4>
@@ -170,6 +177,11 @@
             </div>
 
             <div class="menu-list">
+                <a href="#" class="menu-item" id="menu-admin" style="display: none; border: 1px solid rgba(255, 60, 60, 0.2); background: rgba(255, 60, 60, 0.05); margin-bottom: 12px;">
+                    <div class="menu-icon" style="background: rgba(255, 60, 60, 0.1); color: var(--color-danger);"><i class="ph ph-shield-star"></i></div>
+                    <span style="color: var(--color-danger); font-weight: 600;">Yönetici Paneli</span>
+                    <i class="ph ph-caret-right" style="color: var(--color-danger);"></i>
+                </a>
                 <a href="#" class="menu-item" id="menu-support">
                     <div class="menu-icon"><i class="ph ph-headset"></i></div>
                     <span>Destek Talebi Oluştur</span>
@@ -180,6 +192,20 @@
                     <span>Hizmet Şartları</span>
                     <i class="ph ph-caret-right"></i>
                 </a>
+            </div>
+        </main>
+
+        <!-- VIEW 5: ADMIN PANEL (Yönetici Paneli) -->
+        <main class="view-section" id="view-admin">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h2 class="section-title" style="margin-bottom: 0;">Bekleyen Talepler</h2>
+                <button id="btn-admin-refresh" class="close-modal" style="border-radius: 8px; width: auto; height: auto; padding: 6px 12px; font-size: 13px; font-weight: 600; display: flex; gap: 4px; align-items: center;">
+                    <i class="ph ph-arrows-clockwise"></i> Yenile
+                </button>
+            </div>
+            
+            <div class="admin-payments-list" id="admin-payments-container">
+                <!-- Javascript will load it dynamically -->
             </div>
         </main>
 
@@ -231,6 +257,32 @@
                 </div>
                 <div class="modal-footer">
                     <button class="tg-button primary full-width" id="btn-submit-order">Siparişi Onayla</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ödeme Bildirim Modalı (Gizli) -->
+        <div class="modal-overlay" id="payment-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-payment-name">Ödeme Bildirimi</h3>
+                    <button class="close-modal" id="close-payment-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p class="service-desc" id="modal-payment-desc">Lütfen transfer yaptığınız bilgileri girin.</p>
+                    
+                    <div class="input-group">
+                        <label for="payment-amount">Gönderilen Tutar (₺)</label>
+                        <input type="number" id="payment-amount" placeholder="Örn: 100">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="payment-details" id="lbl-payment-details">Açıklama / Gönderen Ad Soyad</label>
+                        <textarea id="payment-details" placeholder="Örn: Ahmet Yılmaz (Ziraat Bankası Havale)" rows="3" style="width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--glass-border); background: var(--tg-secondary-bg-color); color: var(--tg-text-color); font-size: 15px; outline: none; transition: border-color 0.2s; resize: none;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-submit-payment">Bildirimi Gönder</button>
                 </div>
             </div>
         </div>

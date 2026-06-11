@@ -712,3 +712,75 @@ body.hide-nav .global-header {
 body.hide-nav .app-container {
     padding-top: 20px;
 }
+
+/* --- DRAG SCROLL & ADMIN CARD STYLES --- */
+.categories-scroll {
+    cursor: grab;
+    user-select: none;
+}
+.categories-scroll:active, .categories-scroll.active-drag {
+    cursor: grabbing;
+}
+
+.admin-payment-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--card-radius);
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--glass-shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.admin-payment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 8px;
+}
+.admin-payment-user {
+    font-weight: 700;
+    font-size: 15px;
+}
+.admin-payment-amount {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--tg-button-color);
+}
+.admin-payment-details {
+    font-size: 13px;
+    color: var(--tg-text-color);
+    background: var(--tg-secondary-bg-color);
+    padding: 10px;
+    border-radius: 8px;
+    line-height: 1.4;
+    word-break: break-all;
+}
+.admin-payment-actions {
+    display: flex;
+    gap: 12px;
+}
+.btn-approve, .btn-reject {
+    flex: 1;
+    border: none;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: opacity 0.2s;
+}
+.btn-approve {
+    background: var(--color-success);
+    color: white;
+}
+.btn-reject {
+    background: var(--color-danger);
+    color: white;
+}
+.btn-approve:hover, .btn-reject:hover {
+    opacity: 0.9;
+}
