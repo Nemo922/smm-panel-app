@@ -5,6 +5,7 @@ from typing import Optional
 import httpx
 import database
 import os
+import html
 
 # --- YAPILANDIRMA ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "BURAYA_BOT_TOKEN_YAZIN")
@@ -252,7 +253,7 @@ async def admin_approve_payment(data: AdminAction):
         if req:
             msg = f"✅ <b>Bakiye Yüklendi!</b>\n\n₺{req['amount']:.2f} bakiyeniz onaylandı ve hesabınıza eklendi."
             if data.note:
-                msg += f"\n\n📝 <b>Not:</b> <i>{data.note}</i>"
+                msg += f"\n\n📝 <b>Not:</b> <i>{html.escape(data.note)}</i>"
             await send_telegram_message(req['user_id'], msg)
         return {"success": True, "message": "Ödeme onaylandı ve bakiye eklendi."}
     return {"success": False, "message": "İşlem başarısız veya zaten onaylanmış."}
@@ -267,7 +268,7 @@ async def admin_reject_payment(data: AdminAction):
         if req:
             msg = f"❌ <b>Bakiye Yükleme Talebiniz Reddedildi</b>\n\nTutar: ₺{req['amount']:.2f}"
             if data.note:
-                msg += f"\n\n📝 <b>Not:</b> <i>{data.note}</i>"
+                msg += f"\n\n📝 <b>Not:</b> <i>{html.escape(data.note)}</i>"
             await send_telegram_message(req['user_id'], msg)
         return {"success": True, "message": "Ödeme bildirimi reddedildi."}
     return {"success": False, "message": "İşlem başarısız veya zaten işlenmiş."}
@@ -349,7 +350,7 @@ async def admin_add_balance(data: AdminAddBalance):
         f"💰 <b>Bakiyeniz Güncellendi!</b>\n\n"
         f"Hesabınıza <b>₺{data.amount:.2f}</b> eklendi.\n"
         f"Güncel Bakiye: ₺{new_balance:.2f}\n\n"
-        f"📝 <b>Yönetici Notu:</b> <i>{data.note}</i>"
+        f"📝 <b>Yönetici Notu:</b> <i>{html.escape(data.note)}</i>"
     )
     await send_telegram_message(data.telegram_id, msg)
     
@@ -375,7 +376,7 @@ async def admin_cancel_order(data: AdminOrderAction):
     if result:
         msg = f"❌ <b>Siparişiniz İptal Edildi</b>\n\nSipariş #{data.order_id} iptal edildi ve ₺{result['refund']:.2f} bakiyenize iade edildi."
         if data.note:
-            msg += f"\n\n📝 <b>Not:</b> <i>{data.note}</i>"
+            msg += f"\n\n📝 <b>Not:</b> <i>{html.escape(data.note)}</i>"
         await send_telegram_message(result['user_id'], msg)
         return {"success": True, "message": "Sipariş iptal edildi ve bakiye iade edildi."}
     return {"success": False, "message": "Sipariş bulunamadı veya zaten iptal edilmiş."}
