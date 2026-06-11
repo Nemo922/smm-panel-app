@@ -1,23 +1,19 @@
 import asyncpg
 import os
 
-# Render.com bize bu değişkeni (URL'yi) otomatik verecek. 
-# Eğer yoksa (bilgisayarınızda test ediyorsanız) hata vermemesi için boş kalabilir.
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Global connection pool
 db_pool = None
 
 async def init_db():
     global db_pool
     if not DATABASE_URL:
-        print("UYARI: DATABASE_URL bulunamadı! Lütfen Render.com'da Environment Variable ekleyin.")
+        print("UYARI: DATABASE_URL bulunamadı!")
         return
-        
+
     db_pool = await asyncpg.create_pool(DATABASE_URL)
-    
+
     async with db_pool.acquire() as conn:
-        # Create Users table
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -28,8 +24,6 @@ async def init_db():
                 joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Create Orders table
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id SERIAL PRIMARY KEY,
@@ -42,13 +36,13 @@ async def init_db():
                 order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        print("PostgreSQL Veritabanı tabloları başarıyla oluşturuldu.")
+    print("✅ PostgreSQL tabloları hazır.")
 
 async def get_user(telegram_id: int):
     if not db_pool: return None
     async with db_pool.acquire() as conn:
-        record = await conn.fetchrow("SELECT * FROM users WHERE telegram_id = $1", telegram_id)
-        return dict(record) if record else None
+        row = await conn.fetchrow("SELECT * FROM users WHERE telegram_id = $1", telegram_id)
+        return dict(row) if row else None
 
 async def create_user(telegram_id: int, first_name: str, username: str):
     if not db_pool: return
@@ -77,5 +71,5 @@ async def create_order(user_id: int, service_id: int, link: str, quantity: int, 
 async def get_user_orders(telegram_id: int):
     if not db_pool: return []
     async with db_pool.acquire() as conn:
-        records = await conn.fetch("SELECT * FROM orders WHERE user_id = $1 ORDER BY order_date DESC", telegram_id)
-        return [dict(r) for r in records]
+        rows = await conn.fetch("SELECT * FROM orders WHERE user_id = $1 ORDER BY order_date DESC", telegram_id)
+        return [dict(r) for r in rows]
