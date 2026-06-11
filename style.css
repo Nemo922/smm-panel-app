@@ -640,3 +640,75 @@ body.dark-theme .bonus-banner {
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
 }
+
+/* Register View */
+.register-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 70vh;
+    padding: 20px;
+}
+
+.welcome-icon {
+    font-size: 64px;
+    color: var(--tg-button-color);
+    margin-bottom: 24px;
+    animation: wave 2s infinite;
+    transform-origin: bottom center;
+}
+
+@keyframes wave {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-15deg); }
+    75% { transform: rotate(15deg); }
+}
+
+.register-container h2 {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 12px;
+}
+
+.register-container > p {
+    font-size: 15px;
+    color: var(--tg-hint-color);
+    margin-bottom: 32px;
+    line-height: 1.5;
+}
+
+.register-info-box {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 32px;
+    text-align: left;
+}
+
+.register-info-box i {
+    font-size: 24px;
+    color: var(--color-success);
+}
+
+.register-info-box p {
+    font-size: 13px;
+    color: var(--tg-text-color);
+    line-height: 1.4;
+}
+
+/* Hide navigation when register view is active */
+body.hide-nav .bottom-nav {
+    display: none;
+}
+body.hide-nav .global-header {
+    display: none;
+}
+body.hide-nav .app-container {
+    padding-top: 20px;
+}
