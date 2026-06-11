@@ -40,6 +40,10 @@ async def init_db():
                 order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        try:
+            await conn.execute('ALTER TABLE orders ADD COLUMN admin_note TEXT')
+        except Exception:
+            pass
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS payment_requests (
                 id SERIAL PRIMARY KEY,
@@ -230,7 +234,7 @@ async def get_all_orders():
         """)
         return [dict(r) for r in rows]
 
-async def cancel_order(order_id: int):
+async def cancel_order(order_id: int, note: str = None):
     """Cancel order and refund user balance."""
     if not db_pool: return False
     async with db_pool.acquire() as conn:
@@ -238,7 +242,7 @@ async def cancel_order(order_id: int):
         if not row or row['status'] == 'İptal Edildi':
             return False
         async with conn.transaction():
-            await conn.execute("UPDATE orders SET status = 'İptal Edildi' WHERE id = $1", order_id)
+            await conn.execute("UPDATE orders SET status = 'İptal Edildi', admin_note = $1 WHERE id = $2", note, order_id)
             # Refund if price > 0
             if row['price'] and row['price'] > 0:
                 await conn.execute(

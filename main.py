@@ -34,11 +34,12 @@ async def send_telegram_message(chat_id: int, text: str):
     except Exception:
         pass  # Bildirim hatası siparişi etkilemesin
 
-def get_admin_id() -> int:
-    return int(os.getenv("ADMIN_TELEGRAM_ID", "7910651923"))
+def get_admin_ids() -> list[int]:
+    admins_str = os.getenv("ADMIN_TELEGRAM_IDS", "7910651923,12345")
+    return [int(x.strip()) for x in admins_str.split(',') if x.strip().isdigit()]
 
 def verify_admin(tg_id: int):
-    if tg_id != get_admin_id():
+    if tg_id not in get_admin_ids():
         raise HTTPException(status_code=403, detail="Yetkisiz erişim")
 
 # --- API MODELLERİ ---
@@ -159,7 +160,7 @@ async def get_user_data(tg_id: int):
                 o['order_date'] = str(o['order_date'])
         if user.get('joined_date'):
             user['joined_date'] = str(user['joined_date'])
-        is_admin = (tg_id == get_admin_id())
+        is_admin = (tg_id in get_admin_ids())
         return {"registered": True, "user": user, "orders": orders, "is_admin": is_admin}
     return {"registered": False}
 
@@ -405,7 +406,7 @@ async def admin_get_orders(tg_id: int):
 @app.post("/api/admin/order/cancel")
 async def admin_cancel_order(data: AdminOrderAction):
     verify_admin(data.admin_id)
-    result = await database.cancel_order(data.order_id)
+    result = await database.cancel_order(data.order_id, data.note)
     if result:
         msg = f"❌ <b>Siparişiniz İptal Edildi</b>\n\nSipariş #{data.order_id} iptal edildi ve ₺{result['refund']:.2f} bakiyenize iade edildi."
         if data.note:

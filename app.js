@@ -268,6 +268,14 @@ function renderOrders(orders) {
         const srv = smmServices.find(s => s.id === order.service_id);
         const srvName = srv ? srv.name : (order.service_name || `Servis #${order.service_id}`);
 
+        let noteHtml = '';
+        if (order.admin_note) {
+            noteHtml = `<div style="margin-top:10px; padding:10px; background:var(--tg-secondary-bg-color); border-radius:8px; border-left:3px solid var(--color-danger);">
+                <p style="font-size:12px; color:var(--tg-hint-color); margin-bottom:4px;">Yetkili Notu:</p>
+                <p style="font-size:13px; color:var(--tg-text-color);">${order.admin_note}</p>
+            </div>`;
+        }
+
         const card = document.createElement('div');
         card.className = 'order-card';
         card.innerHTML = `
@@ -278,6 +286,7 @@ function renderOrders(orders) {
             <div class="order-body">
                 <h4>${srvName}</h4>
                 <p class="order-link">${order.link} (${order.quantity} Adet)</p>
+                ${noteHtml}
             </div>
             <div class="order-footer">
                 <span class="order-date">${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
