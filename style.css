@@ -1199,6 +1199,27 @@ body.dark-theme .admin-select {
 }
 .btn-cancel-order:hover { background: rgba(255, 59, 48, 0.2); }
 
+.btn-toggle-visibility {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: none;
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366f1;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+.btn-toggle-visibility:hover { background: rgba(99, 102, 241, 0.2); }
+.btn-toggle-visibility.hidden-state {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4CAF50;
+}
+.btn-toggle-visibility.hidden-state:hover { background: rgba(76, 175, 80, 0.2); }
+
 /* ─── ADMIN SETTINGS ─────────────────────────────────────────── */
 .admin-setting-group {
     background: var(--glass-bg);

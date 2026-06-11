@@ -311,6 +311,12 @@
                     <span>Tüm Siparişler</span>
                     <button class="btn-refresh" id="btn-refresh-orders"><i class="ph ph-arrows-clockwise"></i></button>
                 </div>
+                <div class="admin-filter-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px;">
+                    <span style="font-size:11px; color:var(--tg-hint-color);">Son 24 saat dışındakiler otomatik gizlenir</span>
+                    <button class="btn-toggle-hidden" id="btn-toggle-hidden-orders" style="display:flex; align-items:center; gap:5px; padding:6px 12px; border:none; background:var(--tg-secondary-bg-color); color:var(--tg-text-color); border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.2s;">
+                        <i class="ph ph-eye"></i> <span>Gizlenenleri Göster</span>
+                    </button>
+                </div>
                 <div id="admin-orders-list">
                     <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
                 </div>

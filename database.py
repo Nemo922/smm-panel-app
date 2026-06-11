@@ -44,6 +44,10 @@ async def init_db():
             await conn.execute('ALTER TABLE orders ADD COLUMN admin_note TEXT')
         except Exception:
             pass
+        try:
+            await conn.execute('ALTER TABLE orders ADD COLUMN keep_visible BOOLEAN DEFAULT FALSE')
+        except Exception:
+            pass
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS payment_requests (
                 id SERIAL PRIMARY KEY,
@@ -221,18 +225,40 @@ async def get_user_orders(telegram_id: int):
         rows = await conn.fetch("SELECT * FROM orders WHERE user_id = $1 ORDER BY order_date DESC", telegram_id)
         return [dict(r) for r in rows]
 
-async def get_all_orders():
+async def get_all_orders(show_hidden: bool = False):
     if not db_pool: return []
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT o.*, u.first_name, u.custom_username, s.name as service_name
-            FROM orders o
-            JOIN users u ON o.user_id = u.telegram_id
-            LEFT JOIN services s ON o.service_id = s.id
-            ORDER BY o.order_date DESC
-            LIMIT 200
-        """)
+        if show_hidden:
+            query = """
+                SELECT o.*, u.first_name, u.custom_username, s.name as service_name
+                FROM orders o
+                JOIN users u ON o.user_id = u.telegram_id
+                LEFT JOIN services s ON o.service_id = s.id
+                ORDER BY o.order_date DESC
+                LIMIT 200
+            """
+            rows = await conn.fetch(query)
+        else:
+            query = """
+                SELECT o.*, u.first_name, u.custom_username, s.name as service_name
+                FROM orders o
+                JOIN users u ON o.user_id = u.telegram_id
+                LEFT JOIN services s ON o.service_id = s.id
+                WHERE o.order_date >= NOW() - INTERVAL '1 day' OR o.keep_visible = TRUE
+                ORDER BY o.order_date DESC
+                LIMIT 200
+            """
+            rows = await conn.fetch(query)
         return [dict(r) for r in rows]
+
+async def update_order_visibility(order_id: int, keep_visible: bool):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE orders SET keep_visible = $1 WHERE id = $2",
+            keep_visible, order_id
+        )
+        return result == "UPDATE 1"
 
 async def cancel_order(order_id: int, note: str = None):
     """Cancel order and refund user balance."""

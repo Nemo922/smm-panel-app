@@ -77,6 +77,11 @@ class AdminOrderStatus(BaseModel):
     order_id: int
     status: str
 
+class AdminOrderVisibility(BaseModel):
+    admin_id: int
+    order_id: int
+    keep_visible: bool
+
 class AdminUpdateUser(BaseModel):
     admin_id: int
     telegram_id: int
@@ -234,7 +239,7 @@ async def place_order(data: NewOrder):
     await send_telegram_message(data.telegram_id, user_msg)
 
     # Admin'e bildirim
-    admin_id = get_admin_id()
+    admin_ids = get_admin_ids()
     admin_msg = (
         f"🛒 <b>YENİ SİPARİŞ #{order_id}</b>\n\n"
         f"👤 Kullanıcı: {user.get('first_name', 'Bilinmiyor')} (@{user.get('custom_username', '?')})\n"
@@ -243,7 +248,8 @@ async def place_order(data: NewOrder):
         f"🔢 Miktar: {data.quantity:,}\n"
         f"💰 Tutar: ₺{data.price:.2f}"
     )
-    await send_telegram_message(admin_id, admin_msg)
+    for admin_id in admin_ids:
+        await send_telegram_message(admin_id, admin_msg)
 
     return {"success": True, "message": "Siparişiniz alındı!", "order_id": order_id}
 
@@ -251,7 +257,7 @@ async def place_order(data: NewOrder):
 async def new_payment_request(data: NewPaymentRequest):
     await database.create_payment_request(data.telegram_id, data.amount, data.payment_method, data.details)
     # Admin'e bildirim
-    admin_id = get_admin_id()
+    admin_ids = get_admin_ids()
     user = await database.get_user(data.telegram_id)
     admin_msg = (
         f"💳 <b>YENİ BAKİYE YÜKLEME TALEBİ</b>\n\n"
@@ -260,7 +266,8 @@ async def new_payment_request(data: NewPaymentRequest):
         f"🏦 Yöntem: {data.payment_method}\n"
         f"📝 Açıklama: {data.details}"
     )
-    await send_telegram_message(admin_id, admin_msg)
+    for admin_id in admin_ids:
+        await send_telegram_message(admin_id, admin_msg)
     return {"success": True, "message": "Ödeme bildiriminiz alındı."}
 
 # ═══════════════════════════════════════════════════════════════
@@ -395,9 +402,9 @@ async def admin_add_balance(data: AdminAddBalance):
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/admin/orders")
-async def admin_get_orders(tg_id: int):
+async def admin_get_orders(tg_id: int, show_hidden: bool = False):
     verify_admin(tg_id)
-    orders = await database.get_all_orders()
+    orders = await database.get_all_orders(show_hidden)
     for o in orders:
         if o.get('order_date'):
             o['order_date'] = str(o['order_date'])
@@ -420,6 +427,12 @@ async def admin_update_order_status(data: AdminOrderStatus):
     verify_admin(data.admin_id)
     await database.update_order_status(data.order_id, data.status)
     return {"success": True, "message": f"Sipariş durumu '{data.status}' olarak güncellendi."}
+
+@app.post("/api/admin/order/update-visibility")
+async def admin_update_order_visibility(data: AdminOrderVisibility):
+    verify_admin(data.admin_id)
+    await database.update_order_visibility(data.order_id, data.keep_visible)
+    return {"success": True, "message": "Sipariş görünürlüğü güncellendi."}
 
 # ═══════════════════════════════════════════════════════════════
 # ADMİN – AYARLAR

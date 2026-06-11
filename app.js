@@ -6,6 +6,7 @@ let currentUserData = null;
 let currentSelectedService = null;
 let smmServices = []; // Loaded from backend
 let appSettings = {}; // Loaded from backend
+let adminOrdersShowHidden = false;
 
 // ═══════════════════════════════════════════════════════════════
 // INIT
@@ -729,6 +730,28 @@ function setupAdminPanel() {
     document.getElementById('btn-refresh-orders')?.addEventListener('click', loadAdminOrders);
     document.getElementById('btn-refresh-settings')?.addEventListener('click', loadAdminSettings);
 
+    // Toggle hidden orders
+    const btnToggleHidden = document.getElementById('btn-toggle-hidden-orders');
+    if (btnToggleHidden) {
+        btnToggleHidden.addEventListener('click', async () => {
+            adminOrdersShowHidden = !adminOrdersShowHidden;
+            const icon = btnToggleHidden.querySelector('i');
+            const text = btnToggleHidden.querySelector('span');
+            if (adminOrdersShowHidden) {
+                icon.className = 'ph ph-eye-slash';
+                text.textContent = 'Gizlenenleri Gizle';
+                btnToggleHidden.style.background = 'var(--tg-button-color)';
+                btnToggleHidden.style.color = 'var(--tg-button-text-color)';
+            } else {
+                icon.className = 'ph ph-eye';
+                text.textContent = 'Gizlenenleri Göster';
+                btnToggleHidden.style.background = 'var(--tg-secondary-bg-color)';
+                btnToggleHidden.style.color = 'var(--tg-text-color)';
+            }
+            await loadAdminOrders();
+        });
+    }
+
     // Service form
     document.getElementById('btn-show-add-service')?.addEventListener('click', () => {
         openServiceForm(null);
@@ -1108,7 +1131,7 @@ async function loadAdminOrders() {
     if (!container) return;
     container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
     try {
-        const res = await fetch(`/api/admin/orders?tg_id=${currentUserData.telegram_id}`);
+        const res = await fetch(`/api/admin/orders?tg_id=${currentUserData.telegram_id}&show_hidden=${adminOrdersShowHidden}`);
         const data = await res.json();
         if (res.ok && data.success) {
             container.innerHTML = '';
@@ -1135,6 +1158,20 @@ async function loadAdminOrders() {
                     `;
                 }
 
+                // Check if older than 1 day (24 hours)
+                const orderDate = new Date(order.order_date);
+                const now = new Date();
+                const isOlderThan1Day = (now - orderDate) > (24 * 60 * 60 * 1000);
+                
+                let visibilityBtnHtml = '';
+                if (isOlderThan1Day) {
+                    if (order.keep_visible) {
+                        visibilityBtnHtml = `<button class="btn-toggle-visibility" data-id="${order.id}" data-keep-visible="false"><i class="ph ph-eye-slash"></i> Gizle</button>`;
+                    } else {
+                        visibilityBtnHtml = `<button class="btn-toggle-visibility hidden-state" data-id="${order.id}" data-keep-visible="true"><i class="ph ph-eye"></i> Aktif Et</button>`;
+                    }
+                }
+
                 card.innerHTML = `
                     <div class="admin-order-header">
                         <span class="admin-order-id">#${order.id}</span>
@@ -1145,8 +1182,11 @@ async function loadAdminOrders() {
                     <div class="admin-order-meta" style="word-break:break-all">🔗 ${order.link}</div>
                     <div class="admin-order-footer">
                         <span>₺${parseFloat(order.price).toFixed(2)}</span>
-                        <span>${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
-                        ${order.status !== 'İptal Edildi' ? `<button class="btn-cancel-order" data-id="${order.id}"><i class="ph ph-x-circle"></i> İptal & İade</button>` : ''}
+                        <span>${orderDate.toLocaleDateString('tr-TR')}</span>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            ${visibilityBtnHtml}
+                            ${order.status !== 'İptal Edildi' ? `<button class="btn-cancel-order" data-id="${order.id}"><i class="ph ph-x-circle"></i> İptal & İade</button>` : ''}
+                        </div>
                     </div>
                 `;
                 container.appendChild(card);
@@ -1173,6 +1213,29 @@ async function loadAdminOrders() {
                     } catch { 
                         showAlert("Hata oluştu."); 
                         await loadAdminOrders();
+                    }
+                });
+            });
+
+            container.querySelectorAll('.btn-toggle-visibility').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    const keepVisible = e.currentTarget.getAttribute('data-keep-visible') === 'true';
+                    try {
+                        const res = await fetch('/api/admin/order/update-visibility', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ admin_id: currentUserData.telegram_id, order_id: id, keep_visible: keepVisible })
+                        });
+                        const d = await res.json();
+                        if (d.success) {
+                            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                            await loadAdminOrders();
+                        } else {
+                            showAlert(d.message || "Güncellenemedi.");
+                        }
+                    } catch {
+                        showAlert("Hata oluştu.");
                     }
                 });
             });
