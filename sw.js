@@ -1,10 +1,10 @@
 // SMM Panel - Service Worker (feat_pwa)
-const CACHE_NAME = 'smm-panel-v6';
+const CACHE_NAME = 'smm-panel-v7';
 
 const STATIC_ASSETS = [
     '/',
-    '/style.css?v=6',
-    '/app.js?v=6',
+    '/style.css?v=7',
+    '/app.js?v=7',
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
 ];
 

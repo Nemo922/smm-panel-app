@@ -849,6 +849,9 @@ body.hide-nav .global-header {
 body.hide-nav .app-container {
     padding-top: 20px;
 }
+body.hide-nav #global-support-fab {
+    display: none !important;
+}
 
 /* --- DRAG SCROLL & ADMIN CARD STYLES --- */
 .categories-scroll {
