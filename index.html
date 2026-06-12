@@ -16,9 +16,45 @@
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
+
+    <!-- ══════════════════════════════════════════
+         SPLASH / LOADING EKRANI
+         Uygulama başlarken gösterilir, veri yüklendikten sonra gizlenir
+    ═══════════════════════════════════════════ -->
+    <div id="splash-screen">
+        <div class="splash-inner">
+            <!-- Animasyonlu Logo Alanı -->
+            <div class="splash-logo-wrap">
+                <div class="splash-rings">
+                    <div class="ring ring-1"></div>
+                    <div class="ring ring-2"></div>
+                    <div class="ring ring-3"></div>
+                </div>
+                <div class="splash-logo-icon">
+                    <i class="ph-fill ph-rocket-launch"></i>
+                </div>
+            </div>
+
+            <!-- Marka Adı -->
+            <h1 class="splash-brand" id="splash-brand-name">SMM Panel</h1>
+            <p class="splash-tagline">Sosyal medyanı büyütmenin en hızlı yolu</p>
+
+            <!-- İlerleme Çubuğu -->
+            <div class="splash-progress-track">
+                <div class="splash-progress-bar" id="splash-progress"></div>
+            </div>
+            <p class="splash-status" id="splash-status">Başlatılıyor...</p>
+        </div>
+
+        <!-- Arka plan partikülleri -->
+        <div class="splash-particles">
+            <span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+        </div>
+    </div>
 
     <div class="app-container">
         
@@ -717,6 +753,6 @@
     </div>
 
     <!-- Custom Scripts -->
-    <script src="app.js?v=3"></script>
+    <script src="app.js?v=4"></script>
 </body>
 </html>

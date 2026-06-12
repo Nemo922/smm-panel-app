@@ -9,6 +9,26 @@ let appSettings = {}; // Loaded from backend
 let adminOrdersShowHidden = false;
 
 // ═══════════════════════════════════════════════════════════════
+// SPLASH SCREEN YÖNETİMİ
+// ═══════════════════════════════════════════════════════════════
+const splashEl    = document.getElementById('splash-screen');
+const splashBar   = document.getElementById('splash-progress');
+const splashTxt   = document.getElementById('splash-status');
+
+function setSplashProgress(pct, msg) {
+    if (splashBar) splashBar.style.width = pct + '%';
+    if (splashTxt) splashTxt.textContent = msg;
+}
+
+function hideSplash() {
+    if (!splashEl) return;
+    splashEl.classList.add('splash-fade-out');
+    setTimeout(() => {
+        splashEl.style.display = 'none';
+    }, 600);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", async () => {
@@ -24,6 +44,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (tg.setHeaderColor) tg.setHeaderColor('bg_color');
     setupThemeToggle();
 
+    // Splash başlangıç
+    setSplashProgress(10, 'Bağlantı kuruluyor...');
+
     // Default mock user if not in Telegram
     let telegram_id = 12345;
     let first_name = "Misafir";
@@ -38,15 +61,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     currentUserData = { telegram_id, first_name, username };
 
-    // Load public settings first (brand name, bank info, etc.)
+    // Adım 1: Ayarları yükle
+    setSplashProgress(30, 'Ayarlar yükleniyor...');
     await loadPublicSettings();
 
-    // Load services from backend
+    // Splash'taki marka adını ayarlardan güncelle
+    const splashBrandEl = document.getElementById('splash-brand-name');
+    if (splashBrandEl && appSettings.brand_name) {
+        splashBrandEl.textContent = appSettings.brand_name;
+    }
+
+    // Adım 2: Hizmetleri yükle
+    setSplashProgress(55, 'Hizmetler yükleniyor...');
     await loadServicesFromBackend();
 
-    // Check user registration
+    // Adım 3: Kullanıcı kontrolü
+    setSplashProgress(75, 'Hesap kontrol ediliyor...');
     await checkUserStatus(telegram_id);
 
+    // Adım 4: UI kurulumu
+    setSplashProgress(90, 'Hazırlanıyor...');
     setupTabs();
     setupCategoryFilters();
     setupModals();
@@ -55,10 +89,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupPaymentModal();
     setupAdminPanel();
     setupNotifications();
-    
+
     // Ödeme yöntemlerini dinamik olarak yükle
     await loadPaymentMethodsForFunds();
 
+    // Tamamlandı — splash kapat
+    setSplashProgress(100, 'Hazır! 🚀');
+    await new Promise(r => setTimeout(r, 400)); // Kısa bekleme animasyonu için
+    hideSplash();
 
     // Global Refresh
     const refreshBtn = document.getElementById('global-refresh-btn');
