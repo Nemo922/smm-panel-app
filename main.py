@@ -757,6 +757,11 @@ class SupportReply(BaseModel):
     msg_id: int
     reply: str
 
+class AdminSupportSend(BaseModel):
+    admin_id: int
+    user_id: int
+    message: str
+
 @app.post("/api/support/send")
 async def support_send(data: SupportMessage):
     """Engelli kullanıcıdan destek mesajı al."""
@@ -794,7 +799,7 @@ async def support_get_user_messages(user_id: int):
 
 @app.get("/api/admin/support/messages")
 async def admin_get_support_messages(tg_id: int):
-    """Admin: tüm destek mesajlarını listele."""
+    """Admin: tüm destek mesajlarını listele (eski uyumluluk)."""
     verify_admin(tg_id)
     messages = await database.get_all_support_messages()
     for m in messages:
@@ -803,9 +808,51 @@ async def admin_get_support_messages(tg_id: int):
                 m[k] = v.isoformat()
     return {"success": True, "messages": messages}
 
+@app.get("/api/admin/support/users")
+async def admin_get_support_users(tg_id: int):
+    """Admin: Destek mesajı gönderen kullanıcıların listesi (chat modu)."""
+    verify_admin(tg_id)
+    users = await database.get_support_users()
+    for u in users:
+        for k, v in u.items():
+            if hasattr(v, 'isoformat'):
+                u[k] = v.isoformat()
+    return {"success": True, "users": users}
+
+@app.get("/api/admin/support/chat/{user_id}")
+async def admin_get_support_chat(user_id: int, tg_id: int):
+    """Admin: Belirli bir kullanıcının destek sohbet geçmişi."""
+    verify_admin(tg_id)
+    # Okunmamış mesajları okundu olarak işaretle
+    await database.mark_user_support_read(user_id)
+    messages = await database.get_user_support_chat(user_id)
+    for m in messages:
+        for k, v in m.items():
+            if hasattr(v, 'isoformat'):
+                m[k] = v.isoformat()
+    return {"success": True, "messages": messages}
+
+@app.post("/api/admin/support/send-to-user")
+async def admin_send_support_message(data: AdminSupportSend):
+    """Admin, bir kullanıcıya doğrudan mesaj gönderir."""
+    verify_admin(data.admin_id)
+    msg_id = await database.send_admin_support_message(data.user_id, data.message)
+    if msg_id is None:
+        raise HTTPException(status_code=500, detail="Mesaj gönderilemedi.")
+    
+    # Kullanıcıya Telegram bildirimi gönder
+    reply_tg = (
+        f"✅ <b>Destek Ekibinden Mesaj</b>\n\n"
+        f"💬 <i>{html.escape(data.message)}</i>\n\n"
+        f"<i>Yanıtlamak için uygulamayı açınız.</i>"
+    )
+    await send_telegram_message(data.user_id, reply_tg)
+    
+    return {"success": True, "msg_id": msg_id}
+
 @app.post("/api/admin/support/reply")
 async def admin_reply_support(data: SupportReply):
-    """Admin: destek mesajına yanıt ver."""
+    """Admin: destek mesajına yanıt ver (eski uyumluluk)."""
     verify_admin(data.admin_id)
     await database.reply_support_message(data.msg_id, data.reply)
     

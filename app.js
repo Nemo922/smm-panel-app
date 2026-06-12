@@ -2975,156 +2975,261 @@ function downloadCSV(csvContent, fileName) {
     }
 }
 
+
 // ═══════════════════════════════════════════════════════════════
-// ADMİN — DESTEK MESAJLARI
+// ADMİN — DESTEK CHAT SİSTEMİ
 // ═══════════════════════════════════════════════════════════════
+
+let currentSupportUserId = null;
+let currentSupportUserName = '';
+
+/**
+ * Destek sekmesi açıldığında çağrılır.
+ * Kullanıcı listesini sol panelde gösterir.
+ */
 async function loadAdminSupportMessages() {
-    const container = document.getElementById('admin-support-list');
+    // Kullanıcı listesini göster, chat penceresini gizle
+    const listView = document.getElementById('support-user-list-view');
+    const chatView = document.getElementById('support-chat-view');
+    if (listView) listView.style.display = 'block';
+    if (chatView) chatView.style.display = 'none';
+    currentSupportUserId = null;
+
+    const container = document.getElementById('support-users-container');
     if (!container || !currentUserData) return;
     container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
 
     try {
-        const res = await fetch(`/api/admin/support/messages?tg_id=${currentUserData.telegram_id}`);
+        const res = await fetch(`/api/admin/support/users?tg_id=${currentUserData.telegram_id}`);
         const data = await res.json();
+
         if (!res.ok || !data.success) {
             container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:20px;">Yüklenemedi.</p>';
             return;
         }
 
-        const msgs = data.messages;
-        const pending = msgs.filter(m => !m.reply);
+        const users = data.users;
 
-        // Update badge on tab button
+        // Rozeti güncelle
+        const totalUnread = users.reduce((s, u) => s + (u.unread_count || 0), 0);
         const badge = document.getElementById('support-pending-badge');
         if (badge) {
-            if (pending.length > 0) {
-                badge.textContent = pending.length;
+            if (totalUnread > 0) {
+                badge.textContent = totalUnread;
                 badge.style.display = 'inline-flex';
             } else {
                 badge.style.display = 'none';
             }
         }
 
-        if (msgs.length === 0) {
+        if (users.length === 0) {
             container.innerHTML = `
-                <div style="text-align:center; padding:40px 20px; color:var(--tg-hint-color);">
-                    <i class="ph ph-chat-circle-slash" style="font-size:48px; opacity:0.4; display:block; margin-bottom:12px;"></i>
-                    <p>Henüz destek mesajı yok.</p>
+                <div style="text-align:center; padding:48px 20px; color:var(--tg-hint-color);">
+                    <i class="ph ph-chat-circle-slash" style="font-size:56px; opacity:0.3; display:block; margin-bottom:16px;"></i>
+                    <p style="font-weight:600; margin:0 0 6px;">Henüz destek mesajı yok</p>
+                    <p style="font-size:12px; margin:0;">Kullanıcılar bir mesaj gönderdiğinde burada görünecek.</p>
                 </div>`;
             return;
         }
 
         container.innerHTML = '';
+        users.forEach(user => {
+            const unread = user.unread_count || 0;
+            const lastMsg = user.last_message || '';
+            const lastTime = user.last_message_at
+                ? new Date(user.last_message_at).toLocaleString('tr-TR', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })
+                : '';
+            const initials = (user.first_name || 'U').charAt(0).toUpperCase();
+            const isLastAdmin = user.last_sender === 'admin';
 
-        // Stats strip
-        const statsDiv = document.createElement('div');
-        statsDiv.style.cssText = 'display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;';
-        statsDiv.innerHTML = `
-            <div style="flex:1; min-width:120px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:12px; padding:12px; text-align:center;">
-                <div style="font-size:22px; font-weight:800; color:#ef4444;">${pending.length}</div>
-                <div style="font-size:11px; color:var(--tg-hint-color);">Bekleyen</div>
-            </div>
-            <div style="flex:1; min-width:120px; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.25); border-radius:12px; padding:12px; text-align:center;">
-                <div style="font-size:22px; font-weight:800; color:#22c55e;">${msgs.length - pending.length}</div>
-                <div style="font-size:11px; color:var(--tg-hint-color);">Yanıtlandı</div>
-            </div>`;
-        container.appendChild(statsDiv);
-
-        msgs.forEach(msg => {
-            const card = document.createElement('div');
-            card.style.cssText = `
-                background:var(--tg-secondary-bg-color); border-radius:14px;
-                padding:14px; margin-bottom:12px;
-                border-left:3px solid ${msg.reply ? '#22c55e' : '#ef4444'};
+            const item = document.createElement('div');
+            item.setAttribute('data-user-id', user.user_id);
+            item.setAttribute('data-first-name', user.first_name || '');
+            item.setAttribute('data-username', user.username || '');
+            item.style.cssText = `
+                display:flex; align-items:center; gap:12px;
+                padding:12px 14px; border-radius:14px; cursor:pointer;
+                background:var(--tg-secondary-bg-color);
+                border:1px solid var(--glass-border); margin-bottom:8px;
+                transition:background 0.15s, transform 0.1s;
             `;
-            const dateStr = msg.created_at ? new Date(msg.created_at).toLocaleString('tr-TR') : '';
-            card.innerHTML = `
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                    <div style="
-                        width:34px; height:34px; border-radius:50%; flex-shrink:0;
-                        background:linear-gradient(135deg,#6366f1,#4f46e5);
-                        display:flex; align-items:center; justify-content:center;
-                        font-weight:700; color:#fff; font-size:14px;
-                    ">${(msg.first_name || 'U').charAt(0).toUpperCase()}</div>
-                    <div style="flex:1; min-width:0;">
-                        <div style="font-weight:600; font-size:13px; color:var(--tg-text-color);">
-                            ${escapeHtmlAdmin(msg.first_name || '')}
-                            <span style="color:var(--tg-hint-color); font-weight:400; font-size:11px; margin-left:4px;">${escapeHtmlAdmin(msg.username || '')}</span>
-                        </div>
-                        <div style="font-size:11px; color:var(--tg-hint-color);">ID: ${msg.user_id} · ${dateStr}</div>
-                    </div>
-                    <span style="
-                        font-size:10px; font-weight:700; padding:3px 8px; border-radius:20px;
-                        background:${msg.reply ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'};
-                        color:${msg.reply ? '#22c55e' : '#ef4444'};
-                    ">${msg.reply ? '✓ Yanıtlandı' : '⏳ Bekliyor'}</span>
-                </div>
+            item.innerHTML = `
                 <div style="
-                    background:rgba(255,255,255,0.05); border-radius:10px;
-                    padding:10px 12px; margin-bottom:10px;
-                    font-size:13px; color:var(--tg-text-color); line-height:1.5;
-                ">${escapeHtmlAdmin(msg.message)}</div>
-                ${msg.reply ? `
-                <div style="
-                    background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2);
-                    border-radius:10px; padding:10px 12px; margin-bottom:10px;
-                    font-size:12px; color:#d1fae5; line-height:1.5;
+                    width:46px; height:46px; border-radius:50%; flex-shrink:0;
+                    background:linear-gradient(135deg,#6366f1,#4f46e5);
+                    display:flex; align-items:center; justify-content:center;
+                    font-weight:700; color:#fff; font-size:18px; position:relative;
                 ">
-                    <div style="font-size:10px; color:#22c55e; font-weight:600; margin-bottom:4px;">✓ Yanıtınız</div>
-                    ${escapeHtmlAdmin(msg.reply)}
-                </div>` : `
-                <div style="display:flex; gap:8px; margin-top:6px;">
-                    <input type="text" placeholder="Yanıtınızı yazın..."
-                        id="reply-input-${msg.id}"
-                        onkeydown="if(event.key==='Enter') adminReplySupport(${msg.id})"
-                        style="
-                            flex:1; background:rgba(255,255,255,0.08);
-                            border:1px solid rgba(255,255,255,0.12); border-radius:10px;
-                            padding:8px 12px; color:var(--tg-text-color); font-size:13px;
-                            font-family:inherit; outline:none;
-                        ">
-                    <button onclick="adminReplySupport(${msg.id})" style="
-                        padding:8px 14px; border-radius:10px; border:none; cursor:pointer;
-                        background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff;
-                        font-size:13px; font-weight:600; white-space:nowrap;
-                    ">Yanıtla</button>
-                </div>`}
+                    ${initials}
+                    ${unread > 0 ? `<span style="
+                        position:absolute; top:-2px; right:-2px;
+                        background:#ef4444; color:#fff; border-radius:50%;
+                        min-width:18px; height:18px; font-size:10px; font-weight:700;
+                        display:flex; align-items:center; justify-content:center;
+                        padding:0 4px; border:2px solid var(--tg-secondary-bg-color);
+                    ">${unread}</span>` : ''}
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                        <span style="font-weight:700; font-size:14px; color:var(--tg-text-color);">
+                            ${escapeHtmlAdmin(user.first_name || 'Kullanıcı')}
+                            ${user.username ? `<span style="font-weight:400; font-size:11px; color:var(--tg-hint-color);">@${escapeHtmlAdmin(user.username)}</span>` : ''}
+                        </span>
+                        <span style="font-size:11px; color:var(--tg-hint-color); white-space:nowrap;">${lastTime}</span>
+                    </div>
+                    <div style="font-size:12px; color:var(--tg-hint-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${isLastAdmin ? '<span style="color:var(--tg-button-color); font-weight:600;">Sen: </span>' : ''}
+                        ${escapeHtmlAdmin(lastMsg.substring(0, 60))}${lastMsg.length > 60 ? '...' : ''}
+                    </div>
+                </div>
+                <i class="ph ph-caret-right" style="color:var(--tg-hint-color); font-size:14px; flex-shrink:0;"></i>
             `;
-            container.appendChild(card);
+
+            item.addEventListener('pointerenter', () => { item.style.background = 'var(--glass-bg)'; item.style.transform = 'scale(1.01)'; });
+            item.addEventListener('pointerleave', () => { item.style.background = 'var(--tg-secondary-bg-color)'; item.style.transform = 'scale(1)'; });
+            item.addEventListener('click', () => {
+                openSupportChat(user.user_id, user.first_name || 'Kullanıcı', user.username || '');
+            });
+
+            container.appendChild(item);
         });
 
     } catch(err) {
-        console.error('Destek mesajları yüklenemedi:', err);
+        console.error('Destek kullanıcıları yüklenemedi:', err);
         container.innerHTML = '<p style="color:var(--color-danger); padding:20px; text-align:center;">Bağlantı hatası.</p>';
     }
 }
 
-async function adminReplySupport(msgId) {
-    const input = document.getElementById(`reply-input-${msgId}`);
-    if (!input || !currentUserData) return;
-    const reply = input.value.trim();
-    if (!reply) { showAlert('Yanıt boş olamaz.'); return; }
-    input.disabled = true;
+/**
+ * Belirli bir kullanıcının chat penceresini açar.
+ */
+async function openSupportChat(userId, firstName, username) {
+    currentSupportUserId = userId;
+    currentSupportUserName = firstName;
+
+    const listView = document.getElementById('support-user-list-view');
+    const chatView = document.getElementById('support-chat-view');
+    if (listView) listView.style.display = 'none';
+    if (chatView) { chatView.style.display = 'flex'; }
+
+    // Header bilgilerini güncelle
+    const avatarEl = document.getElementById('support-chat-avatar');
+    const nameEl = document.getElementById('support-chat-name');
+    const idEl = document.getElementById('support-chat-id');
+    if (avatarEl) avatarEl.textContent = (firstName || 'U').charAt(0).toUpperCase();
+    if (nameEl) nameEl.textContent = firstName + (username ? ` @${username}` : '');
+    if (idEl) idEl.textContent = `ID: ${userId}`;
+
+    await loadSupportChatMessages(userId);
+
+    // Input temizle
+    const input = document.getElementById('support-reply-input');
+    if (input) { input.value = ''; input.style.height = 'auto'; input.focus(); }
+}
+
+/**
+ * Belirli bir kullanıcının chat mesajlarını yükler ve gösterir.
+ */
+async function loadSupportChatMessages(userId) {
+    const msgBox = document.getElementById('support-chat-messages');
+    if (!msgBox || !currentUserData) return;
+    msgBox.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+
     try {
-        const res = await fetch('/api/admin/support/reply', {
+        const res = await fetch(`/api/admin/support/chat/${userId}?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            msgBox.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:20px;">Yüklenemedi.</p>';
+            return;
+        }
+
+        msgBox.innerHTML = '';
+
+        if (data.messages.length === 0) {
+            msgBox.innerHTML = `
+                <div style="text-align:center; padding:40px 20px; color:var(--tg-hint-color); margin:auto;">
+                    <i class="ph ph-chat-circle-dots" style="font-size:48px; opacity:0.3; display:block; margin-bottom:12px;"></i>
+                    <p>Henüz mesaj yok.</p>
+                </div>`;
+            return;
+        }
+
+        data.messages.forEach(msg => {
+            const isAdmin = msg.sender === 'admin';
+            const timeStr = msg.created_at
+                ? new Date(msg.created_at).toLocaleString('tr-TR', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })
+                : '';
+
+            const bubble = document.createElement('div');
+            bubble.style.cssText = `
+                display:flex; flex-direction:column; max-width:80%;
+                align-self:${isAdmin ? 'flex-end' : 'flex-start'};
+            `;
+            bubble.innerHTML = `
+                <div style="
+                    padding:10px 14px; border-radius:${isAdmin ? '18px 18px 4px 18px' : '18px 18px 18px 4px'};
+                    background:${isAdmin ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'var(--tg-secondary-bg-color)'};
+                    color:${isAdmin ? '#fff' : 'var(--tg-text-color)'};
+                    font-size:14px; line-height:1.5; word-break:break-word;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.1);
+                ">${escapeHtmlAdmin(msg.message)}</div>
+                <div style="
+                    font-size:10px; color:var(--tg-hint-color); margin-top:4px;
+                    align-self:${isAdmin ? 'flex-end' : 'flex-start'};
+                    padding:0 4px;
+                ">${isAdmin ? '✓ Admin · ' : ''}${timeStr}</div>
+            `;
+            msgBox.appendChild(bubble);
+        });
+
+        // En alta kaydır
+        msgBox.scrollTop = msgBox.scrollHeight;
+
+    } catch(err) {
+        console.error('Chat mesajları yüklenemedi:', err);
+        msgBox.innerHTML = '<p style="color:var(--color-danger); padding:20px; text-align:center;">Bağlantı hatası.</p>';
+    }
+}
+
+/**
+ * Admin'in chat kutusundan mesaj göndermesini işler.
+ */
+async function adminSendSupportMessage() {
+    if (!currentSupportUserId || !currentUserData) return;
+    const input = document.getElementById('support-reply-input');
+    if (!input) return;
+    const msg = input.value.trim();
+    if (!msg) return;
+
+    input.disabled = true;
+    const sendBtn = document.getElementById('btn-support-send');
+    if (sendBtn) { sendBtn.style.opacity = '0.5'; sendBtn.style.transform = 'scale(0.9)'; }
+
+    try {
+        const res = await fetch('/api/admin/support/send-to-user', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 admin_id: currentUserData.telegram_id,
-                msg_id: msgId,
-                reply: reply
+                user_id: currentSupportUserId,
+                message: msg
             })
         });
         const data = await res.json();
         if (res.ok && data.success) {
-            showToast('✅ Yanıt gönderildi, kullanıcıya Telegram bildirimi iletildi.');
-            await loadAdminSupportMessages();
+            input.value = '';
+            input.style.height = 'auto';
+            await loadSupportChatMessages(currentSupportUserId);
         } else {
-            showAlert('Yanıt gönderilemedi.');
+            showAlert('Mesaj gönderilemedi.');
             input.disabled = false;
         }
     } catch(err) {
         showAlert('Bağlantı hatası.');
+        input.disabled = false;
+    } finally {
+        if (sendBtn) { sendBtn.style.opacity = '1'; sendBtn.style.transform = 'scale(1)'; }
         input.disabled = false;
     }
 }
@@ -3138,3 +3243,59 @@ function escapeHtmlAdmin(str) {
         .replace(/"/g,'&quot;')
         .replace(/\n/g,'<br>');
 }
+
+// ─── Destek Chat Event Listener'ları ─────────────────────────────────────────
+
+(function setupSupportChatEvents() {
+    // Geri butonu: chat → kullanıcı listesi
+    const backBtn = document.getElementById('btn-support-back');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            currentSupportUserId = null;
+            const listView = document.getElementById('support-user-list-view');
+            const chatView = document.getElementById('support-chat-view');
+            if (chatView) chatView.style.display = 'none';
+            if (listView) listView.style.display = 'block';
+            // Kullanıcı listesini yenile (rozet güncellemesi için)
+            loadAdminSupportMessages();
+        });
+    }
+
+    // Mesaj gönder butonu
+    const sendBtn = document.getElementById('btn-support-send');
+    if (sendBtn) {
+        sendBtn.addEventListener('click', adminSendSupportMessage);
+    }
+
+    // Textarea — Enter ile gönder (Shift+Enter = yeni satır), otomatik boy ayarı
+    const textarea = document.getElementById('support-reply-input');
+    if (textarea) {
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                adminSendSupportMessage();
+            }
+        });
+        textarea.addEventListener('input', () => {
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+        });
+    }
+
+    // Yenile butonu
+    const refreshBtn = document.getElementById('btn-refresh-support');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            if (currentSupportUserId) {
+                loadSupportChatMessages(currentSupportUserId);
+            } else {
+                loadAdminSupportMessages();
+            }
+        });
+    }
+})();
+
+
+
+
+

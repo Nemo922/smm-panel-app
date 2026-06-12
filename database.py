@@ -115,6 +115,11 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Chat sistemi için sender kolonu (admin/user)
+        try:
+            await conn.execute("ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS sender TEXT DEFAULT 'user'")
+        except Exception:
+            pass
         # Services table - products managed from admin panel
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS services (
@@ -685,15 +690,78 @@ async def send_bulk_notification_db(title: str, message: str):
 # ─── SUPPORT CHAT FUNCTIONS ──────────────────────────────────────────────────
 
 async def create_support_message(user_id: int, first_name: str, username: str, message: str):
+    """Kullanıcıdan gelen destek mesajını kaydet."""
     if not db_pool: return None
     async with db_pool.acquire() as conn:
         row = await conn.fetchrow(
-            "INSERT INTO support_messages (user_id, first_name, username, message) VALUES ($1,$2,$3,$4) RETURNING id",
+            "INSERT INTO support_messages (user_id, first_name, username, message, sender) VALUES ($1,$2,$3,$4,'user') RETURNING id",
             user_id, first_name, username, message
         )
         return row['id'] if row else None
 
+async def send_admin_support_message(user_id: int, admin_message: str):
+    """Admin, kullanıcıya doğrudan bir sohbet mesajı gönderir."""
+    if not db_pool: return None
+    async with db_pool.acquire() as conn:
+        # Kullanıcının bilgilerini al
+        user = await conn.fetchrow("SELECT first_name, username FROM users WHERE telegram_id=$1", user_id)
+        first_name = user['first_name'] if user else ''
+        username = user['username'] if user else ''
+        # Adminin mesajını 'sender=admin' olarak ekle
+        row = await conn.fetchrow(
+            "INSERT INTO support_messages (user_id, first_name, username, message, sender, is_read, replied_at) VALUES ($1,$2,$3,$4,'admin',TRUE,NOW()) RETURNING id",
+            user_id, first_name, username, admin_message
+        )
+        return row['id'] if row else None
+
+async def get_support_users():
+    """Destek mesajı gönderen kullanıcıların listesini, son mesajları ve okunmamış sayılarıyla döndür."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT 
+                user_id,
+                MAX(first_name) as first_name,
+                MAX(username) as username,
+                MAX(created_at) as last_message_at,
+                COUNT(*) FILTER (WHERE sender='user' AND is_read=FALSE) as unread_count,
+                (
+                    SELECT message FROM support_messages sm2 
+                    WHERE sm2.user_id = sm.user_id 
+                    ORDER BY created_at DESC LIMIT 1
+                ) as last_message,
+                (
+                    SELECT sender FROM support_messages sm3 
+                    WHERE sm3.user_id = sm.user_id 
+                    ORDER BY created_at DESC LIMIT 1
+                ) as last_sender
+            FROM support_messages sm
+            GROUP BY user_id
+            ORDER BY last_message_at DESC
+        """)
+        return [dict(r) for r in rows]
+
+async def get_user_support_chat(user_id: int):
+    """Belirli bir kullanıcının tüm destek sohbet geçmişini kronolojik sırayla döndür."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM support_messages WHERE user_id=$1 ORDER BY created_at ASC",
+            user_id
+        )
+        return [dict(r) for r in rows]
+
+async def mark_user_support_read(user_id: int):
+    """Bir kullanıcının gönderdiği tüm mesajları okundu olarak işaretle."""
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE support_messages SET is_read=TRUE WHERE user_id=$1 AND sender='user'",
+            user_id
+        )
+
 async def get_support_messages_for_user(user_id: int):
+    """Kullanıcının kendi chat geçmişini döndür (kullanıcı tarafı)."""
     if not db_pool: return []
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
@@ -703,6 +771,7 @@ async def get_support_messages_for_user(user_id: int):
         return [dict(r) for r in rows]
 
 async def get_all_support_messages():
+    """Tüm destek mesajlarını döndür (eski uyumluluk için)."""
     if not db_pool: return []
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
@@ -711,12 +780,29 @@ async def get_all_support_messages():
         return [dict(r) for r in rows]
 
 async def reply_support_message(msg_id: int, reply: str):
+    """Eski uyumluluk fonksiyonu — belirli bir mesajı yanıtlandı olarak işaretle."""
     if not db_pool: return False
     async with db_pool.acquire() as conn:
-        await conn.execute(
-            "UPDATE support_messages SET reply=$1, is_read=TRUE, replied_at=NOW() WHERE id=$2",
-            reply, msg_id
-        )
+        # Mesajın user_id'sini bul ve o kullanıcıya admin mesajı gönder
+        row = await conn.fetchrow("SELECT user_id FROM support_messages WHERE id=$1", msg_id)
+        if row:
+            user_id = row['user_id']
+            await conn.execute(
+                "INSERT INTO support_messages (user_id, first_name, username, message, sender, is_read, replied_at) VALUES ($1,'','','admin',TRUE,NOW()) ON CONFLICT DO NOTHING",
+                user_id
+            )
+            # Gerçek admin mesajını ekle
+            user = await conn.fetchrow("SELECT first_name, username FROM users WHERE telegram_id=$1", user_id)
+            first_name = user['first_name'] if user else ''
+            username = user['username'] if user else ''
+            await conn.execute(
+                "INSERT INTO support_messages (user_id, first_name, username, message, sender, is_read, replied_at) VALUES ($1,$2,$3,$4,'admin',TRUE,NOW())",
+                user_id, first_name, username, reply
+            )
+            await conn.execute(
+                "UPDATE support_messages SET reply=$1, is_read=TRUE, replied_at=NOW() WHERE id=$2",
+                reply, msg_id
+            )
         return True
 
 
