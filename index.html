@@ -727,9 +727,20 @@
                             </select>
                         </div>
                         <div class="input-group">
-                            <label>İkon (Phosphor)</label>
-                            <input type="text" id="svc-icon" placeholder="ph-instagram-logo">
+                            <label>Kategori (Otomatik İsim/Açıklama İçin)</label>
+                            <select id="svc-category" class="admin-select">
+                                <option value="Takipçi">Takipçi</option>
+                                <option value="Beğeni">Beğeni</option>
+                                <option value="İzlenme">İzlenme</option>
+                                <option value="Yorum">Yorum</option>
+                                <option value="Abonelik">Abonelik / Premium</option>
+                                <option value="Diğer">Diğer / Manuel Giriş</option>
+                            </select>
                         </div>
+                    </div>
+                    <div class="input-group" style="display:none;">
+                        <label>İkon (Phosphor)</label>
+                        <input type="text" id="svc-icon" placeholder="ph-instagram-logo">
                     </div>
                     <div class="input-group">
                         <label>Ürün Adı</label>

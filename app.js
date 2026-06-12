@@ -871,6 +871,11 @@ function renderOrders(orders) {
             reorderBtnHtml = `<button class="btn-reorder" data-service-id="${order.service_id}" style="background:var(--tg-secondary-bg-color); color:var(--tg-text-color); border:none; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;"><i class="ph ph-arrow-counter-clockwise"></i> Tekrarla</button>`;
         }
 
+        let cancelBtnHtml = '';
+        if (status === 'Bekliyor') {
+            cancelBtnHtml = `<button class="btn-cancel-user-order" data-id="${order.id}" style="margin-top:10px; width:100%; background:rgba(239,68,68,0.1); color:var(--color-danger); border:1px solid rgba(239,68,68,0.2); padding:8px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; transition:0.2s;"><i class="ph ph-x-circle"></i> Siparişi İptal Et</button>`;
+        }
+
         const card = document.createElement('div');
         card.className = 'order-card';
         card.innerHTML = `
@@ -883,6 +888,7 @@ function renderOrders(orders) {
                 <p class="order-link" style="word-break: break-all;">${order.link} (${order.quantity} Adet)</p>
                 ${noteHtml}
                 ${progressHtml}
+                ${cancelBtnHtml}
             </div>
             <div class="order-footer" style="align-items: center;">
                 <div style="display:flex; flex-direction:column; gap:2px;">
@@ -902,6 +908,21 @@ function renderOrders(orders) {
             const sid = parseInt(e.currentTarget.getAttribute('data-service-id'));
             // Sipariş modalını aç ve o servisi seç
             openOrderModal(sid);
+        });
+    });
+
+    // Sipariş İptal butonu dinleyicisi
+    document.querySelectorAll('.btn-cancel-user-order').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            const orderId = e.currentTarget.getAttribute('data-id');
+            showConfirm("Siparişi iptal etmek istediğinize emin misiniz? Tutar anında bakiyenize iade edilecektir.", async (confirmed) => {
+                if (confirmed) {
+                    await cancelUserOrder(orderId);
+                    // Kullanıcı bakiyesini ve siparişlerini tekrar yükle
+                    await checkUserStatus(currentUserData.telegram_id);
+                }
+            });
         });
     });
 }
@@ -1938,15 +1959,65 @@ function openServiceForm(svc) {
     document.getElementById('service-form-title').textContent = svc ? 'Ürünü Düzenle' : 'Yeni Ürün Ekle';
     document.getElementById('edit-service-id').value = svc ? svc.id : '';
     document.getElementById('svc-platform').value = svc ? svc.platform : 'instagram';
-    document.getElementById('svc-icon').value = svc ? svc.icon : 'ph-star';
+    document.getElementById('svc-icon').value = svc ? svc.icon : 'ph-instagram-logo';
     document.getElementById('svc-name').value = svc ? svc.name : '';
     document.getElementById('svc-desc').value = svc ? svc.description : '';
     document.getElementById('svc-price').value = svc ? svc.price_per_1000 : '';
     document.getElementById('svc-min').value = svc ? svc.min_order : '';
     document.getElementById('svc-max').value = svc ? svc.max_order : '';
+    document.getElementById('svc-category').value = 'Takipçi';
+    
+    if(!svc) updateServiceAutoFill();
+
     formCard.style.display = 'block';
     formCard.scrollIntoView({ behavior: 'smooth' });
 }
+
+function updateServiceAutoFill() {
+    const platform = document.getElementById('svc-platform').value;
+    const category = document.getElementById('svc-category').value;
+    const nameEl = document.getElementById('svc-name');
+    const descEl = document.getElementById('svc-desc');
+    const iconEl = document.getElementById('svc-icon');
+
+    const platformNames = {
+        'instagram': 'Instagram', 'tiktok': 'TikTok', 'twitter': 'Twitter / X',
+        'youtube': 'YouTube', 'facebook': 'Facebook', 'linkedin': 'LinkedIn',
+        'spotify': 'Spotify', 'twitch': 'Twitch', 'snapchat': 'Snapchat',
+        'telegram': 'Telegram', 'discord': 'Discord', 'other': 'Diğer'
+    };
+
+    const icons = {
+        'instagram': 'ph-instagram-logo', 'tiktok': 'ph-tiktok-logo', 'twitter': 'ph-twitter-logo',
+        'youtube': 'ph-youtube-logo', 'facebook': 'ph-facebook-logo', 'linkedin': 'ph-linkedin-logo',
+        'spotify': 'ph-spotify-logo', 'twitch': 'ph-twitch-logo', 'snapchat': 'ph-snapchat-logo',
+        'telegram': 'ph-telegram-logo', 'discord': 'ph-discord-logo', 'other': 'ph-star'
+    };
+
+    const descriptions = {
+        'Takipçi': 'Keşfet etkili, yüksek hızlı takipçi gönderimi.',
+        'Beğeni': 'Gerçek ve aktif görünümlü beğeni gönderimi.',
+        'İzlenme': 'Videolarınız için hızlı ve organik izlenme.',
+        'Yorum': 'Türkçe ve organik görünümlü yorumlar.',
+        'Abonelik': 'Kanalınız veya sayfanız için premium abonelik.',
+        'Diğer': 'Özel servis.'
+    };
+
+    iconEl.value = icons[platform] || 'ph-star';
+    
+    if (category !== 'Diğer') {
+        nameEl.value = `${platformNames[platform] || 'Platform'} ${category} (Global)`;
+        descEl.value = descriptions[category] || '';
+    }
+}
+
+// Add event listeners for the auto-fill
+document.addEventListener('DOMContentLoaded', () => {
+    const pEl = document.getElementById('svc-platform');
+    const cEl = document.getElementById('svc-category');
+    if (pEl) pEl.addEventListener('change', updateServiceAutoFill);
+    if (cEl) cEl.addEventListener('change', updateServiceAutoFill);
+});
 
 async function saveService() {
     const serviceId = document.getElementById('edit-service-id').value;
@@ -2297,6 +2368,16 @@ async function openUserDetailView(tgId, name) {
                 const sc = statusColors[o.status] || 'var(--tg-hint-color)';
                 const od = new Date((o.order_date||'') + (o.order_date?.includes('T') ? 'Z' : ''));
                 const ds = od.toLocaleDateString('tr-TR');
+                
+                let cancelBtnHtml = '';
+                if (o.status === 'Bekliyor') {
+                    cancelBtnHtml = `
+                        <button class="btn-cancel-user-order" data-id="${o.id}" style="width:100%; margin-top:10px; padding:8px; border:none; border-radius:10px; background:rgba(239,68,68,0.1); color:var(--color-danger); font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            <i class="ph ph-x-circle"></i> Siparişi İptal Et
+                        </button>
+                    `;
+                }
+
                 return `
                 <div style="background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:12px;padding:12px;margin-bottom:8px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -2309,8 +2390,21 @@ async function openUserDetailView(tgId, name) {
                         <span>Miktar: <b>${o.quantity?.toLocaleString()}</b></span>
                         <span style="font-weight:700;color:var(--tg-text-color);">₺${parseFloat(o.price||0).toFixed(2)}</span>
                     </div>
+                    ${cancelBtnHtml}
                 </div>`;
             }).join('');
+            
+            ordersTab.querySelectorAll('.btn-cancel-user-order').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const orderId = e.currentTarget.getAttribute('data-id');
+                    showConfirm("Bu siparişi iptal etmek istediğinize emin misiniz? Sipariş tutarı bakiyenize iade edilecektir.", async (confirmed) => {
+                        if (confirmed) {
+                            await cancelUserOrder(orderId);
+                            openUserDetailView(tgId, name);
+                        }
+                    });
+                });
+            });
         } else {
             ordersTab.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Sipariş bulunamadı.</p>';
         }
@@ -2384,6 +2478,24 @@ async function openUserDetailView(tgId, name) {
                 c.style.display = i === 0 ? 'block' : 'none';
             });
         };
+    }
+}
+
+async function cancelUserOrder(orderId) {
+    try {
+        const res = await fetch('/api/user/order/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telegram_id: currentUserData.telegram_id, order_id: parseInt(orderId) })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('✅ Sipariş başarıyla iptal edildi.');
+        } else {
+            showAlert('❌ ' + (data.message || 'İptal edilemedi.'));
+        }
+    } catch (e) {
+        showAlert('Hata oluştu.');
     }
 }
 

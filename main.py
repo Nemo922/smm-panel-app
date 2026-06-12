@@ -399,6 +399,45 @@ async def place_order(data: NewOrder):
 
     return {"success": True, "message": "Siparişiniz alındı!", "order_id": order_id}
 
+class CancelOrderRequest(BaseModel):
+    telegram_id: int
+    order_id: int
+
+@app.post("/api/user/order/cancel")
+async def user_cancel_order(data: CancelOrderRequest):
+    # Siparişin bu kullanıcıya ait olup olmadığını ve durumunu kontrol et
+    orders = await database.get_user_orders(data.telegram_id)
+    order = next((o for o in orders if o['id'] == data.order_id), None)
+    
+    if not order:
+        return {"success": False, "message": "Sipariş bulunamadı veya size ait değil."}
+    
+    if order['status'] != 'Bekliyor':
+        return {"success": False, "message": f"Bu sipariş '{order['status']}' durumunda olduğu için iptal edilemez (Sadece 'Bekliyor' konumundaki siparişler iptal edilebilir)."}
+    
+    result = await database.cancel_order(data.order_id, note="Kullanıcı tarafından iptal edildi")
+    
+    if result:
+        refund_amount = result.get('refund', 0.0)
+        
+        # Bakiye geçmişine iade ekle
+        user = await database.get_user(data.telegram_id)
+        if user:
+            await database.add_balance_history(
+                data.telegram_id, refund_amount, "iade",
+                f"Sipariş #{data.order_id} iptali",
+                user['balance']
+            )
+            
+        await database.log_activity(
+            data.telegram_id, "sipariş_iptal",
+            f"Kullanıcı siparişi kendi iptal etti. #{data.order_id} | İade: ₺{refund_amount:.2f}"
+        )
+        
+        return {"success": True, "message": "Sipariş iptal edildi ve bakiye iade edildi."}
+        
+    return {"success": False, "message": "Sipariş iptal edilemedi."}
+
 @app.post("/api/payment-request")
 async def new_payment_request(data: NewPaymentRequest):
     settings = await database.get_settings()
