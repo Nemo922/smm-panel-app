@@ -610,10 +610,19 @@ function escapeHtmlSupport(str) {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
+function parseDateUTC(dateStr) {
+    if (!dateStr) return new Date();
+    let str = String(dateStr);
+    if (!str.includes('Z') && !str.includes('+')) {
+        str += 'Z';
+    }
+    return new Date(str);
+}
+
 function formatSupportTime(isoStr) {
     if (!isoStr) return '';
     try {
-        const d = new Date(isoStr);
+        const d = parseDateUTC(isoStr);
         return d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' }) +
                ' · ' + d.toLocaleDateString('tr-TR', { day:'numeric', month:'short' });
     } catch { return ''; }
@@ -820,7 +829,7 @@ function renderOrders(orders) {
             <div class="order-footer" style="align-items: center;">
                 <div style="display:flex; flex-direction:column; gap:2px;">
                     <span class="order-price" style="font-size: 14px; font-weight: 700; color:var(--tg-text-color);">₺${order.price.toFixed(2)}</span>
-                    <span class="order-date" style="font-size: 11px; color:var(--tg-hint-color);">${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
+                    <span class="order-date" style="font-size: 11px; color:var(--tg-hint-color);">${parseDateUTC(order.order_date).toLocaleDateString('tr-TR')}</span>
                 </div>
                 ${reorderBtnHtml}
             </div>
@@ -1666,7 +1675,7 @@ async function loadPendingPayments() {
                         <div class="admin-payment-user">${req.first_name} (@${req.custom_username})</div>
                         <div class="admin-payment-amount">₺${req.amount.toFixed(2)}</div>
                     </div>
-                    <div style="font-size:12px; color:var(--tg-hint-color)">Yöntem: <b>${req.payment_method}</b> | ${new Date(req.request_date).toLocaleString('tr-TR')}</div>
+                    <div style="font-size:12px; color:var(--tg-hint-color)">Yöntem: <b>${req.payment_method}</b> | ${parseDateUTC(req.request_date).toLocaleString('tr-TR')}</div>
                     <div class="admin-payment-details">${req.details}</div>
                     <div class="admin-payment-actions">
                         <button class="btn-approve" data-id="${req.id}"><i class="ph ph-check"></i> Onayla</button>
@@ -2097,7 +2106,7 @@ async function loadAdminOrders() {
                 }
 
                 // Check if older than 1 day (24 hours)
-                const orderDate = new Date(order.order_date);
+                const orderDate = parseDateUTC(order.order_date);
                 const now = new Date();
                 const isOlderThan1Day = (now - orderDate) > (24 * 60 * 60 * 1000);
                 
@@ -2591,7 +2600,7 @@ async function loadNotifications() {
                 const card = document.createElement('div');
                 card.className = `notification-card ${n.is_read ? '' : 'unread'}`;
                 
-                const ndate = new Date(n.created_at);
+                const ndate = parseDateUTC(n.created_at);
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span class="notification-title">${n.title}</span>
@@ -3037,7 +3046,7 @@ async function loadAdminSupportMessages() {
             const unread = user.unread_count || 0;
             const lastMsg = user.last_message || '';
             const lastTime = user.last_message_at
-                ? new Date(user.last_message_at).toLocaleString('tr-TR', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })
+                ? parseDateUTC(user.last_message_at).toLocaleString('tr-TR', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })
                 : '';
             const initials = (user.first_name || 'U').charAt(0).toUpperCase();
             const isLastAdmin = user.last_sender === 'admin';
@@ -3158,7 +3167,7 @@ async function loadSupportChatMessages(userId) {
         data.messages.forEach(msg => {
             const isAdmin = msg.sender === 'admin';
             const timeStr = msg.created_at
-                ? new Date(msg.created_at).toLocaleString('tr-TR', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })
+                ? parseDateUTC(msg.created_at).toLocaleString('tr-TR', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })
                 : '';
 
             const bubble = document.createElement('div');
