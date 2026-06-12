@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -6,6 +6,7 @@ import httpx
 import database
 import os
 import html
+import asyncio
 
 # --- YAPILANDIRMA ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "BURAYA_BOT_TOKEN_YAZIN")
@@ -48,6 +49,7 @@ class RegisterUser(BaseModel):
     first_name: str
     username: str
     custom_username: str
+    referred_by: Optional[int] = None
 
 class NewOrder(BaseModel):
     telegram_id: int
@@ -55,6 +57,7 @@ class NewOrder(BaseModel):
     link: str
     quantity: int
     price: float
+    coupon_code: Optional[str] = None
 
 class NewPaymentRequest(BaseModel):
     telegram_id: int
@@ -139,17 +142,41 @@ class AdminUpdatePaymentMethod(BaseModel):
     admin_id: int
     method_id: int
     name: str
-    description: str = ''
-    icon: str = 'ph-wallet'
-    color: str = '#6366f1'
-    is_active: bool = True
-    sort_order: int = 0
-    account_name: str = ''
-    account_number: str = ''
+    description: str
+    icon: str
+    color: str
+    is_active: bool
+    sort_order: int
+    account_name: Optional[str] = None
+    account_number: Optional[str] = None
 
 class AdminDeletePaymentMethod(BaseModel):
     admin_id: int
     method_id: int
+
+class AdminBlockUser(BaseModel):
+    admin_id: int
+    telegram_id: int
+    is_blocked: bool
+
+class AdminVipLevel(BaseModel):
+    admin_id: int
+    telegram_id: int
+    vip_level: int
+
+class AdminCreateCoupon(BaseModel):
+    admin_id: int
+    code: str
+    discount_percent: float
+    max_uses: int
+
+class AdminDeleteCoupon(BaseModel):
+    admin_id: int
+    coupon_id: int
+
+class ApplyCoupon(BaseModel):
+    telegram_id: int
+    code: str
 
 # ═══════════════════════════════════════════════════════════════
 # KULLANICI / GENEL API UÇ NOKTALARI
@@ -159,6 +186,10 @@ class AdminDeletePaymentMethod(BaseModel):
 async def get_user_data(tg_id: int):
     user = await database.get_user(tg_id)
     if user:
+        settings = await database.get_settings()
+        if user.get("is_blocked") and settings.get("feat_block_user") == "true":
+            raise HTTPException(status_code=403, detail="Hesabınız askıya alınmıştır. Lütfen destek ile iletişime geçiniz.")
+        
         orders = await database.get_user_orders(tg_id)
         for o in orders:
             if o.get('order_date'):
@@ -166,7 +197,23 @@ async def get_user_data(tg_id: int):
         if user.get('joined_date'):
             user['joined_date'] = str(user['joined_date'])
         is_admin = (tg_id in get_admin_ids())
-        return {"registered": True, "user": user, "orders": orders, "is_admin": is_admin}
+        
+        # Referred users details
+        referred_users = []
+        if settings.get("feat_referral") == "true":
+            referred_users = await database.get_referred_users(tg_id)
+            for ru in referred_users:
+                if ru.get('joined_date'):
+                    ru['joined_date'] = str(ru['joined_date'])
+                    
+        return {
+            "registered": True, 
+            "user": user, 
+            "orders": orders, 
+            "is_admin": is_admin,
+            "referred_users": referred_users,
+            "referred_users_count": len(referred_users)
+        }
     return {"registered": False}
 
 @app.get("/api/check-username")
@@ -181,7 +228,12 @@ async def register_user(data: RegisterUser):
         raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış")
     user = await database.get_user(data.telegram_id)
     if not user:
-        await database.create_user(data.telegram_id, data.first_name, data.username, data.custom_username)
+        ref_by = None
+        if data.referred_by:
+            ref_user = await database.get_user(data.referred_by)
+            if ref_user and data.referred_by != data.telegram_id:
+                ref_by = data.referred_by
+        await database.create_user(data.telegram_id, data.first_name, data.username, data.custom_username, ref_by)
     else:
         await database.update_custom_username(data.telegram_id, data.custom_username)
     return {"success": True, "message": "Kayıt başarılı"}
@@ -227,17 +279,68 @@ async def place_order(data: NewOrder):
     user = await database.get_user(data.telegram_id)
     if not user:
         raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
-    if user["balance"] < data.price:
-        raise HTTPException(status_code=400, detail="Bakiye yetersiz")
+    
+    settings = await database.get_settings()
+    
+    # Check block
+    if user.get("is_blocked") and settings.get("feat_block_user") == "true":
+        raise HTTPException(status_code=403, detail="Hesabınız engellenmiştir.")
 
     # Servis bilgisini al
     services = await database.get_all_services()
     service = next((s for s in services if s['id'] == data.service_id), None)
+    if not service:
+        raise HTTPException(status_code=404, detail="Hizmet bulunamadı")
 
-    await database.update_balance(data.telegram_id, -data.price)
-    order_id = await database.create_order(data.telegram_id, data.service_id, data.link, data.quantity, data.price)
+    # Fiyat hesaplama (Güvenlik ve İndirimler)
+    base_price = (service['price_per_1000'] / 1000.0) * data.quantity
+    final_price = base_price
 
-    new_balance = user['balance'] - data.price
+    # VIP indirimi
+    vip_discount = 0.0
+    if settings.get("feat_vip") == "true" and user.get("vip_level", 0) > 0:
+        vip_level = user["vip_level"]
+        vip_discount = min(vip_level * 5.0, 25.0)  # Her seviye %5, max %25
+        final_price = final_price * (1.0 - vip_discount / 100.0)
+
+    # Kupon indirimi
+    coupon_id_to_use = None
+    if data.coupon_code and settings.get("feat_coupons") == "true":
+        coupon = await database.get_coupon(data.coupon_code)
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş kupon kodu")
+        used_already = await database.db_pool.fetchval("SELECT 1 FROM coupon_uses WHERE coupon_id = $1 AND user_id = $2", coupon['id'], data.telegram_id)
+        if used_already:
+            raise HTTPException(status_code=400, detail="Bu kuponu daha önce kullandınız")
+        if coupon['current_uses'] >= coupon['max_uses']:
+            raise HTTPException(status_code=400, detail="Kupon kullanım sınırı dolmuştur")
+        
+        final_price = final_price * (1.0 - coupon['discount_percent'] / 100.0)
+        coupon_id_to_use = coupon['id']
+
+    final_price = round(final_price, 2)
+
+    if user["balance"] < final_price:
+        raise HTTPException(status_code=400, detail="Bakiye yetersiz")
+
+    # Kuponu kullanılmış olarak işaretle
+    if coupon_id_to_use:
+        success = await database.use_coupon(coupon_id_to_use, data.telegram_id)
+        if not success:
+            raise HTTPException(status_code=400, detail="Kupon kullanımı başarısız oldu")
+
+    # Bakiyeyi güncelle ve siparişi oluştur
+    await database.update_balance(data.telegram_id, -final_price)
+    order_id = await database.create_order(data.telegram_id, data.service_id, data.link, data.quantity, final_price)
+
+    # Referans geliri
+    if settings.get("feat_referral") == "true" and user.get("referred_by"):
+        ref_percent = float(settings.get("referral_percent", "10"))
+        ref_earnings = round(final_price * (ref_percent / 100.0), 2)
+        if ref_earnings > 0:
+            await database.add_referral_earnings(user["referred_by"], ref_earnings)
+
+    new_balance = user['balance'] - final_price
     service_name = service['name'] if service else f"Servis #{data.service_id}"
 
     # Kullanıcıya bildirim
@@ -246,7 +349,7 @@ async def place_order(data: NewOrder):
         f"📦 Hizmet: {service_name}\n"
         f"🔗 Link: <code>{data.link}</code>\n"
         f"🔢 Miktar: {data.quantity:,}\n"
-        f"💰 Tutar: ₺{data.price:.2f}\n"
+        f"💰 Tutar: ₺{final_price:.2f}\n"
         f"🆔 Sipariş No: #{order_id}\n\n"
         f"<i>Kalan Bakiye: ₺{new_balance:.2f}</i>"
     )
@@ -260,7 +363,7 @@ async def place_order(data: NewOrder):
         f"📦 Hizmet: {service_name}\n"
         f"🔗 Link: <code>{data.link}</code>\n"
         f"🔢 Miktar: {data.quantity:,}\n"
-        f"💰 Tutar: ₺{data.price:.2f}"
+        f"💰 Tutar: ₺{final_price:.2f}"
     )
     for admin_id in admin_ids:
         await send_telegram_message(admin_id, admin_msg)
@@ -518,6 +621,94 @@ async def admin_delete_payment_method(data: AdminDeletePaymentMethod):
     await database.delete_payment_method(data.method_id)
     return {"success": True, "message": "Ödeme yöntemi silindi."}
 
+
+# ═══════════════════════════════════════════════════════════════
+# GROUP C: GELİŞMİŞ SİSTEMLER ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/coupon/validate")
+async def validate_coupon(code: str, tg_id: int):
+    settings = await database.get_settings()
+    if settings.get("feat_coupons") != "true":
+        raise HTTPException(status_code=400, detail="Kupon sistemi aktif değil")
+    coupon = await database.get_coupon(code)
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Kupon bulunamadı veya süresi dolmuş")
+    used = await database.db_pool.fetchval("SELECT 1 FROM coupon_uses WHERE coupon_id = $1 AND user_id = $2", coupon['id'], tg_id)
+    if used:
+        raise HTTPException(status_code=400, detail="Bu kuponu zaten kullandınız")
+    if coupon['current_uses'] >= coupon['max_uses']:
+        raise HTTPException(status_code=400, detail="Kupon kullanım sınırı dolmuştur")
+    return {"success": True, "discount_percent": coupon['discount_percent']}
+
+@app.get("/api/admin/coupons")
+async def admin_get_coupons(tg_id: int):
+    verify_admin(tg_id)
+    coupons = await database.get_coupons()
+    for c in coupons:
+        if c.get('created_at'):
+            c['created_at'] = str(c['created_at'])
+    return {"success": True, "coupons": coupons}
+
+@app.post("/api/admin/coupon/create")
+async def admin_create_coupon(data: AdminCreateCoupon):
+    verify_admin(data.admin_id)
+    coupon_id = await database.create_coupon(data.code, data.discount_percent, data.max_uses)
+    return {"success": True, "coupon_id": coupon_id, "message": "Kupon oluşturuldu."}
+
+@app.post("/api/admin/coupon/delete")
+async def admin_delete_coupon(data: AdminDeleteCoupon):
+    verify_admin(data.admin_id)
+    success = await database.delete_coupon(data.coupon_id)
+    return {"success": success, "message": "Kupon silindi."}
+
+@app.post("/api/admin/user/block")
+async def admin_block_user(data: AdminBlockUser):
+    verify_admin(data.admin_id)
+    success = await database.block_user(data.telegram_id, data.is_blocked)
+    action = "engellendi" if data.is_blocked else "engeli kaldırıldı"
+    return {"success": success, "message": f"Kullanıcı {action}."}
+
+@app.post("/api/admin/user/vip")
+async def admin_update_vip_level(data: AdminVipLevel):
+    verify_admin(data.admin_id)
+    success = await database.update_vip_level(data.telegram_id, data.vip_level)
+    return {"success": success, "message": f"Kullanıcı VIP seviyesi {data.vip_level} olarak güncellendi."}
+
+# ═══════════════════════════════════════════════════════════════
+# GROUP D: ANALYTICS & BULK NOTIFICATIONS ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+class AdminBulkNotify(BaseModel):
+    admin_id: int
+    title: str
+    message: str
+
+async def send_bulk_telegram_job(user_ids: list[int], text: str):
+    for uid in user_ids:
+        await send_telegram_message(uid, text)
+        await asyncio.sleep(0.04) # 25 messages per second rate limiting safety
+
+@app.get("/api/admin/analytics")
+async def admin_get_analytics(tg_id: int):
+    verify_admin(tg_id)
+    analytics = await database.get_admin_analytics()
+    return {"success": True, "analytics": analytics}
+
+@app.post("/api/admin/bulk-notify")
+async def admin_bulk_notify(data: AdminBulkNotify, background_tasks: BackgroundTasks):
+    verify_admin(data.admin_id)
+    settings = await database.get_settings()
+    if settings.get("feat_bulk_notify") != "true":
+        raise HTTPException(status_code=400, detail="Toplu bildirim özelliği aktif değil")
+        
+    user_ids = await database.send_bulk_notification_db(data.title, data.message)
+    
+    # Send Telegram in background
+    tg_text = f"📢 <b>{data.title}</b>\n\n{data.message}"
+    background_tasks.add_task(send_bulk_telegram_job, user_ids, tg_text)
+    
+    return {"success": True, "message": f"Toplu bildirim sıraya alındı. {len(user_ids)} üyeye iletiliyor."}
 
 # ═══════════════════════════════════════════════════════════════
 # STATİK DOSYALAR

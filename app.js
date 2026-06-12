@@ -7,6 +7,8 @@ let currentSelectedService = null;
 let smmServices = []; // Loaded from backend
 let appSettings = {}; // Loaded from backend
 let adminOrdersShowHidden = false;
+let currentCoupon = null; // Group C: Applied Coupon
+let salesChartInstance = null; // Group D: Chart reference
 
 // ═══════════════════════════════════════════════════════════════
 // SPLASH SCREEN YÖNETİMİ
@@ -51,6 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let telegram_id = 12345;
     let first_name = "Misafir";
     let username = "kullanici";
+    let referred_by = null;
 
     if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
         const user = tg.initDataUnsafe.user;
@@ -59,7 +62,28 @@ document.addEventListener("DOMContentLoaded", async () => {
         username = user.username ? `@${user.username}` : `ID: ${user.id}`;
     }
 
-    currentUserData = { telegram_id, first_name, username };
+    if (tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
+        const param = String(tg.initDataUnsafe.start_param);
+        const match = param.match(/\d+/);
+        if (match) {
+            referred_by = parseInt(match[0]);
+        }
+    }
+
+    currentUserData = { telegram_id, first_name, username, referred_by };
+
+    // Copy Referral Link Event Listener
+    const btnCopyRef = document.getElementById('btn-copy-ref-link');
+    if (btnCopyRef) {
+        btnCopyRef.addEventListener('click', () => {
+            const input = document.getElementById('referral-link-input');
+            if (!input) return;
+            input.select();
+            input.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(input.value);
+            showToast("📋 Referans linki kopyalandı!");
+        });
+    }
 
     // Adım 1: Ayarları yükle
     setSplashProgress(30, 'Ayarlar yükleniyor...');
@@ -163,6 +187,76 @@ function applySettings(settings) {
     // Crypto networks label
     const cryptoLabel = document.getElementById('crypto-networks-label');
     if (cryptoLabel && settings.crypto_networks) cryptoLabel.textContent = settings.crypto_networks;
+
+    // ─── FEAT: Group A (Arayüz) ───
+    
+    // feat_announcement: Duyuru Banner
+    const annContainer = document.getElementById('feat-announcement-container');
+    if (annContainer) {
+        annContainer.style.display = settings.feat_announcement === 'true' ? 'flex' : 'none';
+        // Gerçek sistemde ayar tablosundan text de eklenebilir, şimdilik placeholder kullanıyoruz.
+    }
+
+    // feat_search: Hizmet Arama Çubuğu
+    const searchContainer = document.getElementById('feat-search-container');
+    if (searchContainer) {
+        searchContainer.style.display = settings.feat_search === 'true' ? 'block' : 'none';
+    }
+
+    // feat_faq: Sık Sorulan Sorular
+    const faqMenu = document.getElementById('menu-faq');
+    if (faqMenu) {
+        faqMenu.style.display = settings.feat_faq === 'true' ? 'flex' : 'none';
+    }
+
+    // feat_animations: Ekstra Animasyonlar
+    if (settings.feat_animations === 'true') {
+        document.body.classList.add('enhanced-animations');
+    } else {
+        document.body.classList.remove('enhanced-animations');
+    }
+
+    // ─── FEAT: Group B (Kullanıcı İşlemleri) ───
+    
+    // feat_favorites: Favori Servisler
+    const favChip = document.getElementById('feat-favorites-chip');
+    if (favChip) {
+        favChip.style.display = settings.feat_favorites === 'true' ? 'inline-flex' : 'none';
+    }
+
+    // feat_stats: Gelişmiş İstatistikler
+    const statsContainer = document.getElementById('feat-stats-container');
+    if (statsContainer) {
+        statsContainer.style.display = settings.feat_stats === 'true' ? 'grid' : 'none';
+    }
+
+    // feat_coupon_mgr: Admin Kupon Yönetimi Tab Butonu
+    const couponTabBtn = document.getElementById('admin-tab-coupons-btn');
+    if (couponTabBtn) {
+        couponTabBtn.style.display = settings.feat_coupon_mgr === 'true' ? 'block' : 'none';
+    }
+
+    // feat_analytics: Admin Analizler Tab Butonu
+    const analyticsTabBtn = document.getElementById('admin-tab-analytics-btn');
+    if (analyticsTabBtn) {
+        analyticsTabBtn.style.display = settings.feat_analytics === 'true' ? 'block' : 'none';
+    }
+
+    // feat_bulk_notify: Toplu Bildirim Formu
+    const bulkNotifyCont = document.getElementById('feat-bulk-notify-container');
+    if (bulkNotifyCont) {
+        bulkNotifyCont.style.display = settings.feat_bulk_notify === 'true' ? 'block' : 'none';
+    }
+
+    // feat_export: CSV Dışa Aktarma Butonları
+    const exportUsersBtn = document.getElementById('btn-export-users-csv');
+    if (exportUsersBtn) {
+        exportUsersBtn.style.display = settings.feat_export === 'true' ? 'flex' : 'none';
+    }
+    const exportOrdersBtn = document.getElementById('btn-export-orders-csv');
+    if (exportOrdersBtn) {
+        exportOrdersBtn.style.display = settings.feat_export === 'true' ? 'flex' : 'none';
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -186,9 +280,22 @@ async function loadServicesFromBackend() {
 async function checkUserStatus(tg_id) {
     try {
         const response = await fetch(`/api/user?tg_id=${tg_id}`);
+        if (response.status === 403) {
+            const errData = await response.json();
+            document.body.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; text-align:center; padding:30px; font-family:'Inter',sans-serif; background:var(--tg-bg-color); color:var(--tg-text-color);">
+                    <i class="ph-fill ph-prohibit" style="font-size:64px; color:var(--color-danger); margin-bottom:16px;"></i>
+                    <h2>Erişim Engellendi</h2>
+                    <p style="color:var(--tg-hint-color); margin-top:8px; line-height:1.5;">${errData.detail || 'Hesabınız askıya alınmıştır.'}</p>
+                </div>
+            `;
+            return;
+        }
         const data = await response.json();
 
         if (data.registered) {
+            currentUserData = { ...currentUserData, ...data.user };
+            
             if (!data.user.custom_username) {
                 document.body.classList.add('hide-nav');
                 showView('view-register');
@@ -197,6 +304,7 @@ async function checkUserStatus(tg_id) {
                 return;
             }
             updateDashboardUI(data.user, data.orders);
+            updateVipAndReferralUI(data);
             renderOrders(data.orders);
             renderServices('all');
             await loadNotifications();
@@ -252,7 +360,8 @@ async function registerUser(userData) {
                 telegram_id: userData.telegram_id,
                 first_name: userData.first_name,
                 username: userData.username,
-                custom_username: customUsername
+                custom_username: customUsername,
+                referred_by: userData.referred_by
             })
         });
         const data = await response.json();
@@ -286,6 +395,17 @@ function updateDashboardUI(userDbInfo, orders = []) {
     const totalSpentEl = document.getElementById('profile-total-spent');
     if (orderCountEl) orderCountEl.textContent = totalOrders;
     if (totalSpentEl) totalSpentEl.textContent = `₺${totalSpent.toFixed(2)}`;
+
+    // ─── FEAT: Group B (Gelişmiş İstatistikler) ───
+    if (appSettings.feat_stats === 'true') {
+        const completedCount = orders.filter(o => o.status === 'Tamamlandı').length;
+        const pendingCount = orders.filter(o => o.status === 'Bekliyor' || o.status === 'İşlemde').length;
+        
+        const statsCompletedEl = document.getElementById('stats-completed-orders');
+        const statsPendingEl = document.getElementById('stats-pending-orders');
+        if (statsCompletedEl) statsCompletedEl.textContent = completedCount;
+        if (statsPendingEl) statsPendingEl.textContent = pendingCount;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -317,6 +437,34 @@ function renderOrders(orders) {
             </div>`;
         }
 
+        // ─── FEAT: Group B (Sipariş İlerleme Çubuğu) ───
+        let progressHtml = '';
+        if (appSettings.feat_order_progress === 'true') {
+            let progress = 0;
+            let pColor = 'var(--color-primary)';
+            if (status === 'Bekliyor') progress = 33;
+            else if (status === 'İşlemde') progress = 66;
+            else if (status === 'Tamamlandı') { progress = 100; pColor = 'var(--color-success)'; }
+            else if (status === 'İptal Edildi') { progress = 100; pColor = 'var(--color-danger)'; }
+            
+            progressHtml = `
+            <div style="margin-top: 12px;">
+                <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:6px; color:var(--tg-hint-color); font-weight: 600;">
+                    <span>İlerleme</span>
+                    <span>%${progress}</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: var(--tg-secondary-bg-color); border-radius: 3px; overflow: hidden;">
+                    <div style="width: ${progress}%; height: 100%; background: ${pColor}; border-radius: 3px; transition: width 0.5s ease;"></div>
+                </div>
+            </div>`;
+        }
+
+        // ─── FEAT: Group B (Tekrar Sipariş Butonu) ───
+        let reorderBtnHtml = '';
+        if (appSettings.feat_reorder === 'true') {
+            reorderBtnHtml = `<button class="btn-reorder" data-service-id="${order.service_id}" style="background:var(--tg-secondary-bg-color); color:var(--tg-text-color); border:none; padding:6px 10px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;"><i class="ph ph-arrow-counter-clockwise"></i> Tekrarla</button>`;
+        }
+
         const card = document.createElement('div');
         card.className = 'order-card';
         card.innerHTML = `
@@ -326,15 +474,29 @@ function renderOrders(orders) {
             </div>
             <div class="order-body">
                 <h4>${srvName}</h4>
-                <p class="order-link">${order.link} (${order.quantity} Adet)</p>
+                <p class="order-link" style="word-break: break-all;">${order.link} (${order.quantity} Adet)</p>
                 ${noteHtml}
+                ${progressHtml}
             </div>
-            <div class="order-footer">
-                <span class="order-date">${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
-                <span class="order-price">₺${order.price.toFixed(2)}</span>
+            <div class="order-footer" style="align-items: center;">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span class="order-price" style="font-size: 14px; font-weight: 700; color:var(--tg-text-color);">₺${order.price.toFixed(2)}</span>
+                    <span class="order-date" style="font-size: 11px; color:var(--tg-hint-color);">${new Date(order.order_date).toLocaleDateString('tr-TR')}</span>
+                </div>
+                ${reorderBtnHtml}
             </div>
         `;
         container.appendChild(card);
+    });
+
+    // Tekrar Sipariş Ver butonu dinleyicisi
+    document.querySelectorAll('.btn-reorder').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            const sid = parseInt(e.currentTarget.getAttribute('data-service-id'));
+            // Sipariş modalını aç ve o servisi seç
+            openOrderModal(sid);
+        });
     });
 }
 
@@ -374,32 +536,118 @@ function renderServices(filterPlatform) {
     const container = document.getElementById('services-container');
     if (!container) return;
     container.innerHTML = '';
-    const filtered = filterPlatform === 'all' ? smmServices : smmServices.filter(s => s.platform === filterPlatform);
+    
+    // Uygula feat_search
+    const searchInput = document.getElementById('service-search-input');
+    const query = (appSettings.feat_search === 'true' && searchInput) ? searchInput.value.toLowerCase().trim() : '';
+
+    // Favorileri yerel hafızadan al
+    let favorites = [];
+    try { favorites = JSON.parse(localStorage.getItem('fav_services')) || []; } catch(e){}
+
+    let filtered = [];
+    if (filterPlatform === 'all') {
+        filtered = smmServices;
+    } else if (filterPlatform === 'favorites') {
+        filtered = smmServices.filter(s => favorites.includes(s.id));
+    } else {
+        filtered = smmServices.filter(s => s.platform === filterPlatform);
+    }
+    
+    if (query) {
+        filtered = filtered.filter(s => s.name.toLowerCase().includes(query) || s.platform.toLowerCase().includes(query));
+    }
+
     if (filtered.length === 0) {
-        container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 30px;">Bu kategoride henüz hizmet bulunmuyor.</p>';
+        container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 30px;">Eşleşen hizmet bulunamadı.</p>';
         return;
     }
+
+    const isRedesign = appSettings.feat_service_redesign === 'true';
+
     filtered.forEach(service => {
         const card = document.createElement('div');
-        card.className = 'service-card';
-        card.innerHTML = `
-            <div class="service-header">
-                <div class="service-icon platform-${service.platform}"><i class="ph ${service.icon}"></i></div>
-                <div class="service-info">
-                    <h4>${service.name}</h4>
-                    <p>Min: ${service.min_order} - Max: ${service.max_order}</p>
+        
+        // ─── FEAT: Group B (Favoriler) ───
+        let favIconHtml = '';
+        if (appSettings.feat_favorites === 'true') {
+            const isFav = favorites.includes(service.id);
+            const favColor = isFav ? '#f59e0b' : 'var(--tg-hint-color)';
+            const favClass = isFav ? 'ph-fill ph-star' : 'ph ph-star';
+            favIconHtml = `<button class="btn-favorite" data-id="${service.id}" style="background:none; border:none; color:${favColor}; font-size:22px; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; transition: transform 0.2s;"><i class="${favClass}"></i></button>`;
+        }
+
+        if (isRedesign) {
+            // YENİ TİP KART TASARIMI
+            card.className = 'service-card redesign';
+            card.innerHTML = `
+                <div class="service-redesign-header">
+                    <div class="redesign-icon platform-${service.platform}"><i class="ph ${service.icon}"></i></div>
+                    <div class="redesign-title">
+                        <h4>${service.name}</h4>
+                        <div class="redesign-badges">
+                            <span class="badge-minmax"><i class="ph ph-arrows-down-up"></i> ${service.min_order} - ${service.max_order}</span>
+                            <span class="badge-platform">${service.platform.toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <div style="margin-left:auto;">${favIconHtml}</div>
                 </div>
-            </div>
-            <div class="service-footer">
-                <div class="price">₺${parseFloat(service.price_per_1000).toFixed(2)} <span>/ 1000 Adet</span></div>
-                <button class="btn-buy" data-id="${service.id}">Satın Al</button>
-            </div>
-        `;
+                <div class="service-redesign-footer">
+                    <div class="redesign-price-box">
+                        <span class="currency">₺</span>
+                        <span class="amount">${parseFloat(service.price_per_1000).toFixed(2)}</span>
+                        <span class="unit">/ 1000</span>
+                    </div>
+                    <button class="tg-button primary btn-buy" data-id="${service.id}" style="padding: 10px 16px; font-size: 14px; border-radius: 10px;">
+                        <i class="ph ph-shopping-cart"></i> Satın Al
+                    </button>
+                </div>
+            `;
+        } else {
+            // ESKİ TİP KART TASARIMI
+            card.className = 'service-card';
+            card.innerHTML = `
+                <div class="service-header">
+                    <div class="service-icon platform-${service.platform}"><i class="ph ${service.icon}"></i></div>
+                    <div class="service-info">
+                        <h4>${service.name}</h4>
+                        <p>Min: ${service.min_order} - Max: ${service.max_order}</p>
+                    </div>
+                    <div style="margin-left:auto;">${favIconHtml}</div>
+                </div>
+                <div class="service-footer">
+                    <div class="price">₺${parseFloat(service.price_per_1000).toFixed(2)} <span>/ 1000 Adet</span></div>
+                    <button class="btn-buy" data-id="${service.id}">Satın Al</button>
+                </div>
+            `;
+        }
+        
         container.appendChild(card);
     });
     document.querySelectorAll('.btn-buy').forEach(btn => {
         btn.addEventListener('click', (e) => {
             openOrderModal(parseInt(e.target.getAttribute('data-id')));
+        });
+    });
+
+    // Favoriye Ekle / Çıkar dinleyicisi
+    document.querySelectorAll('.btn-favorite').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            const sid = parseInt(e.currentTarget.getAttribute('data-id'));
+            let favs = [];
+            try { favs = JSON.parse(localStorage.getItem('fav_services')) || []; } catch(err){}
+            if (favs.includes(sid)) {
+                favs = favs.filter(id => id !== sid); // Çıkar
+            } else {
+                favs.push(sid); // Ekle
+                if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+            }
+            localStorage.setItem('fav_services', JSON.stringify(favs));
+            
+            // Yeniden render et (şu anki filtreyi koruyarak)
+            const activeChip = document.querySelector('.category-chip.active');
+            renderServices(activeChip ? activeChip.getAttribute('data-cat') : 'all');
         });
     });
 }
@@ -414,6 +662,16 @@ function setupCategoryFilters() {
             renderServices(chip.getAttribute('data-cat'));
         });
     });
+
+    // FEAT: Search input event
+    const searchInput = document.getElementById('service-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const activeChip = document.querySelector('.category-chip.active');
+            const cat = activeChip ? activeChip.getAttribute('data-cat') : 'all';
+            renderServices(cat);
+        });
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -484,6 +742,44 @@ function setupModals() {
     const paymentActionCloseBtn = paymentActionModal ? paymentActionModal.querySelector('.close-modal') : null;
     if (paymentActionCloseBtn) paymentActionCloseBtn.addEventListener('click', () => paymentActionModal.classList.remove('active'));
     if (paymentActionModal) paymentActionModal.addEventListener('click', (e) => { if (e.target === paymentActionModal) paymentActionModal.classList.remove('active'); });
+
+    // FEAT: Apply Coupon Event Listener
+    const btnApplyCoupon = document.getElementById('btn-apply-coupon');
+    if (btnApplyCoupon) {
+        btnApplyCoupon.addEventListener('click', async () => {
+            const codeInput = document.getElementById('order-coupon');
+            const code = codeInput.value.trim().toUpperCase();
+            if (!code) { showAlert("Lütfen bir kupon kodu girin."); return; }
+            
+            btnApplyCoupon.disabled = true;
+            btnApplyCoupon.textContent = "...";
+            const msgEl = document.getElementById('coupon-message');
+            msgEl.textContent = '';
+            
+            try {
+                const res = await fetch(`/api/coupon/validate?code=${code}&tg_id=${currentUserData.telegram_id}`);
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    currentCoupon = { code: code, discountPercent: data.discount_percent };
+                    codeInput.disabled = true;
+                    btnApplyCoupon.textContent = "✓";
+                    msgEl.style.color = '#22c55e';
+                    msgEl.textContent = `Kupon uygulandı! %${data.discount_percent} indirim.`;
+                    calculatePrice();
+                } else {
+                    msgEl.style.color = 'var(--color-danger)';
+                    msgEl.textContent = data.detail || "Geçersiz kupon.";
+                    btnApplyCoupon.disabled = false;
+                    btnApplyCoupon.textContent = "Uygula";
+                }
+            } catch(e) {
+                msgEl.style.color = 'var(--color-danger)';
+                msgEl.textContent = "Bağlantı hatası.";
+                btnApplyCoupon.disabled = false;
+                btnApplyCoupon.textContent = "Uygula";
+            }
+        });
+    }
 }
 
 const modal = document.getElementById('order-modal');
@@ -501,6 +797,34 @@ function openOrderModal(serviceId) {
     document.getElementById('modal-max').textContent = currentSelectedService.max_order;
     inputLink.value = '';
     inputQuantity.value = currentSelectedService.min_order;
+    
+    // Reset coupon UI & State
+    currentCoupon = null;
+    const couponGroup = document.getElementById('feat-coupon-group');
+    if (couponGroup) {
+        couponGroup.style.display = appSettings.feat_coupons === 'true' ? 'block' : 'none';
+    }
+    const couponInput = document.getElementById('order-coupon');
+    if (couponInput) {
+        couponInput.value = '';
+        couponInput.disabled = false;
+    }
+    const couponMessage = document.getElementById('coupon-message');
+    if (couponMessage) {
+        couponMessage.textContent = '';
+        couponMessage.style.color = '';
+    }
+    const applyBtn = document.getElementById('btn-apply-coupon');
+    if (applyBtn) {
+        applyBtn.textContent = 'Uygula';
+        applyBtn.disabled = false;
+    }
+    
+    const couponDiscountRow = document.getElementById('coupon-discount-row');
+    if (couponDiscountRow) couponDiscountRow.style.display = 'none';
+    const vipDiscountRow = document.getElementById('vip-discount-row');
+    if (vipDiscountRow) vipDiscountRow.style.display = 'none';
+
     calculatePrice();
     modal.classList.add('active');
     if (tg.MainButton) {
@@ -513,6 +837,7 @@ function openOrderModal(serviceId) {
 function closeModal() {
     modal.classList.remove('active');
     currentSelectedService = null;
+    currentCoupon = null;
     if (tg.MainButton) tg.MainButton.hide();
 }
 
@@ -526,7 +851,36 @@ function calculatePrice() {
     } else {
         inputQuantity.style.borderColor = 'var(--tg-button-color)';
     }
-    const price = (qty / 1000) * parseFloat(currentSelectedService.price_per_1000);
+    
+    let price = (qty / 1000) * parseFloat(currentSelectedService.price_per_1000);
+    
+    // VIP discount
+    if (appSettings.feat_vip === 'true' && currentUserData && currentUserData.vip_level > 0) {
+        const vipDiscount = Math.min(currentUserData.vip_level * 5, 25);
+        price = price * (1 - vipDiscount / 100);
+        const vipRow = document.getElementById('vip-discount-row');
+        if (vipRow) {
+            vipRow.style.display = 'block';
+            document.getElementById('modal-vip-discount').textContent = `-%${vipDiscount}`;
+        }
+    } else {
+        const vipRow = document.getElementById('vip-discount-row');
+        if (vipRow) vipRow.style.display = 'none';
+    }
+    
+    // Coupon discount
+    if (appSettings.feat_coupons === 'true' && currentCoupon) {
+        price = price * (1 - currentCoupon.discountPercent / 100);
+        const couponRow = document.getElementById('coupon-discount-row');
+        if (couponRow) {
+            couponRow.style.display = 'block';
+            document.getElementById('modal-coupon-discount').textContent = `-%${currentCoupon.discountPercent}`;
+        }
+    } else {
+        const couponRow = document.getElementById('coupon-discount-row');
+        if (couponRow) couponRow.style.display = 'none';
+    }
+    
     elTotalPrice.textContent = `₺${price.toFixed(2)}`;
 }
 
@@ -539,7 +893,20 @@ const submitOrder = async () => {
         showAlert(`Miktar ${currentSelectedService.min_order} - ${currentSelectedService.max_order} arasında olmalıdır.`);
         return;
     }
-    const price = (qty / 1000) * parseFloat(currentSelectedService.price_per_1000);
+    
+    let price = (qty / 1000) * parseFloat(currentSelectedService.price_per_1000);
+    
+    // VIP discount client calculation
+    if (appSettings.feat_vip === 'true' && currentUserData && currentUserData.vip_level > 0) {
+        const vipDiscount = Math.min(currentUserData.vip_level * 5, 25);
+        price = price * (1 - vipDiscount / 100);
+    }
+    
+    // Coupon discount client calculation
+    if (appSettings.feat_coupons === 'true' && currentCoupon) {
+        price = price * (1 - currentCoupon.discountPercent / 100);
+    }
+    
     if (tg.MainButton) tg.MainButton.showProgress();
     btnSubmitOrder.disabled = true;
     btnSubmitOrder.textContent = "İşleniyor...";
@@ -550,7 +917,10 @@ const submitOrder = async () => {
             body: JSON.stringify({
                 telegram_id: currentUserData.telegram_id,
                 service_id: currentSelectedService.id,
-                link, quantity: qty, price
+                link, 
+                quantity: qty, 
+                price: price,
+                coupon_code: (appSettings.feat_coupons === 'true' && currentCoupon) ? currentCoupon.code : null
             })
         });
         const data = await response.json();
@@ -718,6 +1088,30 @@ function setupProfileMenu() {
         closeTermsModal();
     });
     if (termsModal) termsModal.addEventListener('click', (e) => { if (e.target === termsModal) closeTermsModal(); });
+
+    // ─── FEAT: FAQ ───
+    const menuFaq = document.getElementById('menu-faq');
+    const btnFaqBack = document.getElementById('btn-faq-back');
+    
+    if (menuFaq) {
+        menuFaq.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.nav-item').forEach(nav => {
+                nav.classList.remove('active');
+                const icon = nav.querySelector('i');
+                if (icon) icon.className = icon.className.replace('ph-fill', 'ph');
+            });
+            showView('view-faq');
+            window.scrollTo(0, 0);
+        });
+    }
+    
+    if (btnFaqBack) {
+        btnFaqBack.addEventListener('click', () => {
+            showView('view-profile');
+            document.querySelector('[data-target="view-profile"]').classList.add('active');
+        });
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -783,7 +1177,46 @@ function setupAdminPanel() {
             else if (tabId === 'tab-orders') loadAdminOrders();
             else if (tabId === 'tab-payment-methods') loadAdminPaymentMethods();
             else if (tabId === 'tab-settings') loadAdminSettings();
+            else if (tabId === 'tab-features') loadAdminFeatures();
+            else if (tabId === 'tab-coupons') loadAdminCoupons();
+            else if (tabId === 'tab-analytics') loadAdminAnalytics();
         });
+    });
+
+    // Coupons Form Event Listeners
+    document.getElementById('btn-show-add-coupon')?.addEventListener('click', () => {
+        document.getElementById('coupon-form-card').style.display = 'block';
+    });
+    document.getElementById('btn-cancel-coupon-form')?.addEventListener('click', () => {
+        document.getElementById('coupon-form-card').style.display = 'none';
+    });
+    document.getElementById('btn-save-coupon')?.addEventListener('click', async () => {
+        const code = document.getElementById('coupon-code').value.trim().toUpperCase();
+        const discount = parseFloat(document.getElementById('coupon-discount').value) || 0;
+        const maxUses = parseInt(document.getElementById('coupon-max-uses').value) || 0;
+        
+        if (!code || discount <= 0 || discount > 100 || maxUses <= 0) {
+            showAlert("Lütfen tüm alanları geçerli değerlerle doldurun."); return;
+        }
+        
+        const btn = document.getElementById('btn-save-coupon');
+        btn.disabled = true; btn.textContent = "...";
+        
+        try {
+            const res = await fetch('/api/admin/coupon/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUserData.telegram_id, code, discount_percent: discount, max_uses: maxUses })
+            });
+            const d = await res.json();
+            document.getElementById('coupon-form-card').style.display = 'none';
+            document.getElementById('coupon-code').value = '';
+            document.getElementById('coupon-discount').value = '';
+            document.getElementById('coupon-max-uses').value = '';
+            await loadAdminCoupons();
+            showAlert(d.message || 'Kupon oluşturuldu.');
+        } catch { showAlert("Hata oluştu."); }
+        finally { btn.disabled = false; btn.textContent = "Oluştur"; }
     });
 
     // Refresh buttons
@@ -791,6 +1224,7 @@ function setupAdminPanel() {
     document.getElementById('btn-refresh-users')?.addEventListener('click', loadAdminUsers);
     document.getElementById('btn-refresh-orders')?.addEventListener('click', loadAdminOrders);
     document.getElementById('btn-refresh-settings')?.addEventListener('click', loadAdminSettings);
+    document.getElementById('btn-refresh-features')?.addEventListener('click', loadAdminFeatures);
 
     // Toggle hidden orders
     const btnToggleHidden = document.getElementById('btn-toggle-hidden-orders');
@@ -834,6 +1268,39 @@ function setupAdminPanel() {
         document.getElementById('payment-method-form-card').style.display = 'none';
     });
     document.getElementById('btn-save-pm')?.addEventListener('click', savePaymentMethod);
+
+    // Bulk Notify button click
+    document.getElementById('btn-send-bulk-notify')?.addEventListener('click', async () => {
+        const title = document.getElementById('bulk-notify-title').value.trim();
+        const msg = document.getElementById('bulk-notify-message').value.trim();
+        if (!title || !msg) { showAlert("Lütfen tüm alanları doldurun."); return; }
+        
+        showConfirm("Tüm kullanıcılara bu duyuruyu göndermek istiyor musunuz?", async (confirmed) => {
+            if (!confirmed) return;
+            const btn = document.getElementById('btn-send-bulk-notify');
+            btn.disabled = true; btn.textContent = "...";
+            try {
+                const res = await fetch('/api/admin/bulk-notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ admin_id: currentUserData.telegram_id, title, message: msg })
+                });
+                const d = await res.json();
+                if (d.success) {
+                    document.getElementById('bulk-notify-title').value = '';
+                    document.getElementById('bulk-notify-message').value = '';
+                    showAlert(d.message);
+                } else {
+                    showAlert(d.detail || "Gönderilemedi.");
+                }
+            } catch { showAlert("Hata oluştu."); }
+            finally { btn.disabled = false; btn.textContent = "Duyuruyu Gönder"; }
+        });
+    });
+
+    // Export CSV events
+    document.getElementById('btn-export-users-csv')?.addEventListener('click', exportUsersCSV);
+    document.getElementById('btn-export-orders-csv')?.addEventListener('click', exportOrdersCSV);
 }
 
 // ─── PAYMENTS TAB ────────────────────────────────────────────
@@ -1078,15 +1545,26 @@ async function loadAdminUsers() {
             data.users.forEach(user => {
                 const card = document.createElement('div');
                 card.className = 'admin-user-card';
+                
+                let vipText = '';
+                if (user.vip_level > 0) {
+                    vipText = ` · <span style="color:#f59e0b;font-weight:700;"><i class="ph-fill ph-crown"></i> VIP ${user.vip_level}</span>`;
+                }
+                
+                let blockedText = '';
+                if (user.is_blocked) {
+                    blockedText = ` · <span style="color:var(--color-danger);font-weight:700;">ENGELLESİ</span>`;
+                }
+
                 card.innerHTML = `
                     <div class="admin-user-avatar">${(user.first_name || '?').charAt(0).toUpperCase()}</div>
                     <div class="admin-user-info">
                         <div class="admin-user-name">${user.first_name || 'Bilinmiyor'}</div>
-                        <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}</div>
+                        <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}${vipText}${blockedText}</div>
                         <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b></div>
                     </div>
                     <div style="display:flex; gap:6px;">
-                        <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}">
+                        <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}" data-vip="${user.vip_level || 0}" data-blocked="${user.is_blocked || false}">
                             <i class="ph ph-pencil-simple"></i>
                         </button>
                         <button class="btn-add-balance" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: rgba(52, 199, 89, 0.12); color: var(--color-success); font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.2s;">
@@ -1099,7 +1577,7 @@ async function loadAdminUsers() {
             container.querySelectorAll('.btn-edit-user').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const b = e.currentTarget;
-                    openUserEditModal(b.dataset.tgid, b.dataset.name, b.dataset.balance);
+                    openUserEditModal(b.dataset.tgid, b.dataset.name, b.dataset.balance, b.dataset.vip, b.dataset.blocked);
                 });
             });
             container.querySelectorAll('.btn-add-balance').forEach(btn => {
@@ -1116,11 +1594,26 @@ async function loadAdminUsers() {
     }
 }
 
-function openUserEditModal(tgId, name, balance) {
+function openUserEditModal(tgId, name, balance, vipLevel = 0, isBlocked = false) {
     document.getElementById('edit-user-tg-id').value = tgId;
     document.getElementById('edit-user-name').value = name;
     document.getElementById('edit-user-balance').value = parseFloat(balance).toFixed(2);
     document.getElementById('edit-user-tgid-display').value = tgId;
+
+    // VIP Group Display
+    const vipGroup = document.getElementById('edit-user-vip-group');
+    if (vipGroup) {
+        vipGroup.style.display = appSettings.feat_vip === 'true' ? 'block' : 'none';
+        document.getElementById('edit-user-vip').value = vipLevel;
+    }
+
+    // Block Group Display
+    const blockGroup = document.getElementById('edit-user-block-group');
+    if (blockGroup) {
+        blockGroup.style.display = appSettings.feat_block_user === 'true' ? 'block' : 'none';
+        document.getElementById('edit-user-is-blocked').value = String(isBlocked) === 'true' ? 'true' : 'false';
+    }
+
     document.getElementById('user-edit-modal').classList.add('active');
 }
 
@@ -1129,21 +1622,47 @@ async function saveUser() {
     const name = document.getElementById('edit-user-name').value.trim();
     const balance = parseFloat(document.getElementById('edit-user-balance').value) || 0;
     if (!name) { showAlert("Ad boş olamaz."); return; }
+    
     const btn = document.getElementById('btn-save-user');
     btn.disabled = true; btn.textContent = "Kaydediliyor...";
+    
     try {
+        // Base user details update
         const res = await fetch('/api/admin/user/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, balance, first_name: name })
         });
-        const d = await res.json();
-        // Close modal first, then show success
+        await res.json();
+
+        // Save VIP Seviyesi if active
+        if (appSettings.feat_vip === 'true') {
+            const vipLevel = parseInt(document.getElementById('edit-user-vip').value);
+            await fetch('/api/admin/user/vip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, vip_level: vipLevel })
+            });
+        }
+
+        // Save block status if active
+        if (appSettings.feat_block_user === 'true') {
+            const isBlocked = document.getElementById('edit-user-is-blocked').value === 'true';
+            await fetch('/api/admin/user/block', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, is_blocked: isBlocked })
+            });
+        }
+
         document.getElementById('user-edit-modal').classList.remove('active');
         await loadAdminUsers();
-        showAlert(d.message || '✅ Kullanıcı güncellendi.');
-    } catch { showAlert("Hata oluştu."); }
-    finally { btn.disabled = false; btn.textContent = "Kaydet"; }
+        showAlert('✅ Kullanıcı bilgileri güncellendi.');
+    } catch { 
+        showAlert("Hata oluştu."); 
+    } finally { 
+        btn.disabled = false; btn.textContent = "Kaydet"; 
+    }
 }
 
 function openAddBalanceModal(tgId, name) {
@@ -1744,5 +2263,357 @@ async function markNotificationsAsRead() {
         document.querySelectorAll('.notification-card.unread').forEach(c => c.classList.remove('unread'));
     } catch (err) {
         console.error("Bildirimler okundu işaretlenemedi:", err);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ÖZELLİK YÖNETİMİ (MODÜLLER) TAB'I
+// ═══════════════════════════════════════════════════════════════
+async function loadAdminFeatures() {
+    const container = document.getElementById('admin-features-container');
+    if (!container) return;
+    
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Özellikler yükleniyor...</p>';
+    
+    try {
+        // Ayarları normal endpoint'ten çekiyoruz
+        const res = await fetch(`/api/admin/settings?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+            const settings = data.settings;
+            container.innerHTML = '';
+            
+            const featureList = [
+                { key: "feat_search", label: "🔍 Hizmet Arama Çubuğu", group: "Arayüz (Grup A)" },
+                { key: "feat_faq", label: "❓ SSS / Yardım Sayfası", group: "Arayüz (Grup A)" },
+                { key: "feat_announcement", label: "📢 Duyuru Banner Sistemi", group: "Arayüz (Grup A)" },
+                { key: "feat_animations", label: "✨ Ekstra Mikro Animasyonlar", group: "Arayüz (Grup A)" },
+                { key: "feat_service_redesign", label: "🖼️ Yeni Tip Servis Kartları", group: "Arayüz (Grup A)" },
+                
+                { key: "feat_favorites", label: "⭐ Favori Servisler", group: "Kullanıcı İşlemleri (Grup B)" },
+                { key: "feat_reorder", label: "🔄 Tekrar Sipariş Butonu", group: "Kullanıcı İşlemleri (Grup B)" },
+                { key: "feat_stats", label: "📊 Profilde Gelişmiş İstatistik", group: "Kullanıcı İşlemleri (Grup B)" },
+                { key: "feat_order_progress", label: "📦 Sipariş İlerleme Çubuğu", group: "Kullanıcı İşlemleri (Grup B)" },
+                
+                { key: "feat_coupons", label: "🎟️ Kupon / İndirim Kullanımı", group: "Gelişmiş Sistemler (Grup C)" },
+                { key: "feat_coupon_mgr", label: "🎟️ Admin: Kupon Yönetimi", group: "Gelişmiş Sistemler (Grup C)" },
+                { key: "feat_vip", label: "🏆 VIP / Sadakat Seviyeleri", group: "Gelişmiş Sistemler (Grup C)" },
+                { key: "feat_referral", label: "👥 Referans Sistemi", group: "Gelişmiş Sistemler (Grup C)" },
+                { key: "feat_block_user", label: "🚫 Kullanıcı Engelleme", group: "Gelişmiş Sistemler (Grup C)" },
+                
+                { key: "feat_analytics", label: "📈 Grafikli Dashboard", group: "Yönetim (Grup D)" },
+                { key: "feat_revenue", label: "💰 Gelir Raporları", group: "Yönetim (Grup D)" },
+                { key: "feat_export", label: "📋 Excel / CSV Dışa Aktarma", group: "Yönetim (Grup D)" },
+                { key: "feat_bulk_notify", label: "📣 Toplu Bildirim Atma", group: "Yönetim (Grup D)" },
+                
+                { key: "feat_live_support", label: "💬 Canlı Destek Botu", group: "Ekstra Özellikler" },
+                { key: "feat_bulk_order", label: "🧮 Toplu Sipariş Girişi", group: "Ekstra Özellikler" },
+                { key: "feat_pwa", label: "📱 PWA Yükleme", group: "Ekstra Özellikler" },
+                { key: "feat_activity_log", label: "📝 Aktivite Logları", group: "Ekstra Özellikler" },
+                { key: "feat_auto_api", label: "🤖 Otomatik API Gönderimi", group: "Ekstra Özellikler" },
+                { key: "feat_theme_color", label: "🌈 Dinamik Tema Rengi", group: "Ekstra Özellikler" },
+                { key: "feat_rich_notif", label: "🔔 Zengin Push Bildirimler", group: "Ekstra Özellikler" }
+            ];
+
+            let currentGroup = "";
+            let html = "";
+            
+            featureList.forEach(feat => {
+                if (currentGroup !== feat.group) {
+                    currentGroup = feat.group;
+                    html += `<div style="margin-top:20px; margin-bottom:10px; font-size:13px; font-weight:700; color:var(--tg-button-color); border-bottom: 1px solid var(--glass-border); padding-bottom:5px;">${currentGroup}</div>`;
+                }
+                
+                const isEnabled = settings[feat.key] === 'true';
+                
+                html += `
+                    <div class="feature-toggle-item" style="display:flex; justify-content:space-between; align-items:center; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:12px; padding:12px 16px; margin-bottom:8px;">
+                        <div>
+                            <div style="font-weight:600; font-size:14px; color:var(--tg-text-color);">${feat.label}</div>
+                            <div style="font-size:11px; color:var(--tg-hint-color); margin-top:2px;">
+                                ${isEnabled ? '<span style="color:var(--color-success)">Aktif</span>' : 'Pasif'}
+                            </div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" class="feature-checkbox" data-key="${feat.key}" ${isEnabled ? 'checked' : ''}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            
+            // Add event listeners to checkboxes
+            container.querySelectorAll('.feature-checkbox').forEach(cb => {
+                cb.addEventListener('change', async (e) => {
+                    const key = e.target.getAttribute('data-key');
+                    const isChecked = e.target.checked;
+                    
+                    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+                    
+                    // Geçici olarak deaktif yap
+                    e.target.disabled = true;
+                    
+                    try {
+                        const res = await fetch('/api/admin/settings/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                admin_id: currentUserData.telegram_id,
+                                key: key,
+                                value: isChecked ? 'true' : 'false'
+                            })
+                        });
+                        const d = await res.json();
+                        
+                        if (!d.success) {
+                            showAlert("Hata: " + (d.message || "Kaydedilemedi"));
+                            e.target.checked = !isChecked; // geri al
+                        } else {
+                            // Başarılı ise arayüzü güncellemesi için appSettings nesnesini güncelle
+                            appSettings[key] = isChecked ? 'true' : 'false';
+                            
+                            // Yanındaki yazıyı güncelle
+                            const statusText = e.target.closest('.feature-toggle-item').querySelector('span');
+                            if (statusText) {
+                                statusText.style.color = isChecked ? 'var(--color-success)' : '';
+                                statusText.textContent = isChecked ? 'Aktif' : 'Pasif';
+                            }
+                        }
+                    } catch (err) {
+                        showAlert("Sunucu bağlantı hatası.");
+                        e.target.checked = !isChecked;
+                    } finally {
+                        e.target.disabled = false;
+                    }
+                });
+            });
+
+        } else {
+            container.innerHTML = `<p style="text-align:center; color:var(--color-danger); padding: 20px;">Hata: ${data.detail || 'Yüklenemedi'}</p>`;
+        }
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding: 20px;">Sunucuyla bağlantı kurulamadı.</p>';
+    }
+}
+
+// ─── GROUP C CUSTOM RENDERING AND HELPERS ────────────────────────────────────
+
+function updateVipAndReferralUI(data) {
+    const user = data.user;
+    
+    // VIP Badge
+    const vipBadge = document.getElementById('profile-vip-badge');
+    const vipLevelText = document.getElementById('profile-vip-level-text');
+    if (vipBadge && vipLevelText) {
+        if (appSettings.feat_vip === 'true' && user.vip_level > 0) {
+            vipBadge.style.display = 'inline-flex';
+            vipLevelText.textContent = `VIP Seviye ${user.vip_level}`;
+        } else {
+            vipBadge.style.display = 'none';
+        }
+    }
+    
+    // Referrals Container
+    const referralContainer = document.getElementById('feat-referral-container');
+    if (referralContainer) {
+        if (appSettings.feat_referral === 'true') {
+            referralContainer.style.display = 'block';
+            
+            const refPercentText = document.getElementById('ref-bonus-percent-text');
+            if (refPercentText) {
+                refPercentText.textContent = `%${appSettings.referral_percent || '10'}`;
+            }
+            
+            const refLinkInput = document.getElementById('referral-link-input');
+            if (refLinkInput) {
+                // Generate deep link for the Telegram bot
+                const cleanBrand = (appSettings.brand_name || 'bot').toLowerCase().replace(/\s+/g, '');
+                refLinkInput.value = `https://t.me/${cleanBrand}?startapp=${user.telegram_id}`;
+            }
+            
+            document.getElementById('ref-count').textContent = data.referred_users_count || 0;
+            document.getElementById('ref-earnings').textContent = `₺${parseFloat(user.referral_earnings || 0).toFixed(2)}`;
+        } else {
+            referralContainer.style.display = 'none';
+        }
+    }
+}
+
+async function loadAdminCoupons() {
+    const container = document.getElementById('admin-coupons-list');
+    if (!container) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/admin/coupons?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            container.innerHTML = '';
+            if (data.coupons.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Henüz kupon yok. Yeni Ekle butonunu kullanın.</p>';
+                return;
+            }
+            data.coupons.forEach(coupon => {
+                const card = document.createElement('div');
+                card.className = 'admin-service-card';
+                card.innerHTML = `
+                    <div class="admin-service-info">
+                        <div class="service-icon" style="width:36px;height:36px;font-size:18px;flex-shrink:0;background:rgba(34,197,94,0.12);color:#22c55e;display:flex;align-items:center;justify-content:center;">
+                            <i class="ph ph-ticket"></i>
+                        </div>
+                        <div>
+                            <div class="admin-service-name">${coupon.code}</div>
+                            <div class="admin-service-meta">%${coupon.discount_percent} İndirim · Kullanım: ${coupon.current_uses}/${coupon.max_uses}</div>
+                        </div>
+                    </div>
+                    <div class="admin-service-actions">
+                        <button class="btn-delete-coupon" data-id="${coupon.id}" style="background:var(--color-danger);color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;display:flex;align-items:center;justify-content:center;width:36px;height:36px;">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            container.querySelectorAll('.btn-delete-coupon').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                    showConfirm("Bu kuponu silmek istediğinize emin misiniz?", async (confirmed) => {
+                        if (!confirmed) return;
+                        try {
+                            const res = await fetch('/api/admin/coupon/delete', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ admin_id: currentUserData.telegram_id, coupon_id: id })
+                            });
+                            const d = await res.json();
+                            showAlert(d.message || 'Kupon silindi.');
+                            await loadAdminCoupons();
+                        } catch { showAlert("Hata oluştu."); }
+                    });
+                });
+            });
+        } else {
+            container.innerHTML = `<p style="color:var(--color-danger);padding:20px;">${data.detail || 'Yüklenemedi'}</p>`;
+        }
+    } catch {
+        container.innerHTML = '<p style="color:var(--color-danger);padding:20px;">Bağlantı hatası.</p>';
+    }
+}
+
+// ─── GROUP D CUSTOM RENDERING AND HELPERS ────────────────────────────────────
+
+async function loadAdminAnalytics() {
+    try {
+        const res = await fetch(`/api/admin/analytics?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        
+        if (res.ok && data.success) {
+            const stats = data.analytics;
+            
+            document.getElementById('analytics-total-users').textContent = stats.total_users;
+            document.getElementById('analytics-total-orders').textContent = stats.total_orders;
+            document.getElementById('analytics-pending-payments').textContent = `₺${stats.pending_payments_amount.toFixed(2)} (${stats.pending_payments_count})`;
+            
+            // Ciro Kartı (feat_revenue)
+            const revCard = document.getElementById('feat-revenue-card');
+            if (revCard) {
+                if (appSettings.feat_revenue === 'true') {
+                    revCard.style.display = 'flex';
+                    document.getElementById('analytics-total-revenue').textContent = `₺${stats.total_revenue.toFixed(2)}`;
+                } else {
+                    revCard.style.display = 'none';
+                }
+            }
+            
+            // Chart.js Çizimi (feat_analytics)
+            const chartData = stats.sales_chart;
+            const labels = chartData.map(item => item.date);
+            const amounts = chartData.map(item => item.amount);
+            
+            const ctx = document.getElementById('salesChartCanvas').getContext('2d');
+            if (salesChartInstance) salesChartInstance.destroy();
+            
+            salesChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.length > 0 ? labels : ['Veri Yok'],
+                    datasets: [{
+                        label: 'Satış Tutarı',
+                        data: amounts.length > 0 ? amounts : [0],
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: 'var(--tg-hint-color)' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: 'var(--tg-hint-color)' }
+                        }
+                    }
+                }
+            });
+        }
+    } catch(err) {
+        console.error("Analizler yüklenemedi:", err);
+    }
+}
+
+async function exportUsersCSV() {
+    try {
+        const res = await fetch(`/api/admin/users?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            let csv = "Telegram ID,Ad,Kullanici Adi,Ozel Kullanici Adi,Bakiye,Kayit Tarihi,VIP Seviyesi,Engelli mi\n";
+            data.users.forEach(u => {
+                csv += `"${u.telegram_id}","${u.first_name || ''}","${u.username || ''}","${u.custom_username || ''}","${u.balance || 0}","${u.joined_date || ''}","${u.vip_level || 0}","${u.is_blocked || false}"\n`;
+            });
+            downloadCSV(csv, "smm_users_export.csv");
+            showToast("📥 Kullanıcılar CSV olarak indirildi.");
+        }
+    } catch(err) { showAlert("Dışa aktarma başarısız."); }
+}
+
+async function exportOrdersCSV() {
+    try {
+        const res = await fetch(`/api/admin/orders?tg_id=${currentUserData.telegram_id}&show_hidden=true`);
+        const data = await res.json();
+        if (res.ok && data.success) {
+            let csv = "Siparis ID,Kullanici,Hizmet,Miktar,Tutar,Baglanti,Durum,Tarih\n";
+            data.orders.forEach(o => {
+                csv += `"${o.id}","${o.first_name} (@${o.custom_username})","${o.service_name || o.service_id}","${o.quantity}","${o.price}","${o.link}","${o.status}","${o.order_date}"\n`;
+            });
+            downloadCSV(csv, "smm_orders_export.csv");
+            showToast("📥 Siparişler CSV olarak indirildi.");
+        }
+    } catch(err) { showAlert("Dışa aktarma başarısız."); }
+}
+
+function downloadCSV(csvContent, fileName) {
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 }

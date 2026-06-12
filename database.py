@@ -28,6 +28,15 @@ async def init_db():
         await conn.execute('''
             ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_username TEXT UNIQUE
         ''')
+        # FEAT: Group C (Gelişmiş Özellikler) için users tablosuna yeni kolonlar
+        try: await conn.execute('ALTER TABLE users ADD COLUMN is_blocked BOOLEAN DEFAULT FALSE')
+        except Exception: pass
+        try: await conn.execute('ALTER TABLE users ADD COLUMN vip_level INTEGER DEFAULT 0')
+        except Exception: pass
+        try: await conn.execute('ALTER TABLE users ADD COLUMN referred_by BIGINT')
+        except Exception: pass
+        try: await conn.execute('ALTER TABLE users ADD COLUMN referral_earnings DOUBLE PRECISION DEFAULT 0.0')
+        except Exception: pass
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id SERIAL PRIMARY KEY,
@@ -67,6 +76,27 @@ async def init_db():
                 details TEXT,
                 status TEXT DEFAULT 'Bekliyor',
                 request_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # FEAT: Group C - Kupon Sistemi
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS coupons (
+                id SERIAL PRIMARY KEY,
+                code TEXT UNIQUE NOT NULL,
+                discount_percent DOUBLE PRECISION NOT NULL,
+                max_uses INTEGER DEFAULT 1,
+                current_uses INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS coupon_uses (
+                id SERIAL PRIMARY KEY,
+                coupon_id INTEGER REFERENCES coupons(id),
+                user_id BIGINT REFERENCES users(telegram_id),
+                used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         # Services table - products managed from admin panel
@@ -140,6 +170,32 @@ async def init_db():
             ('bonus_desc', '₺500 ve üzeri tüm bakiye yüklemelerinde anında %10 ekstra bonus cüzdanına eklenir.'),
             ('bonus_threshold', '500'),
             ('bonus_percent', '10'),
+            # Yeni Eklenen 25 Özellik Şalteri (Varsayılan: false)
+            ('feat_search', 'false'),
+            ('feat_favorites', 'false'),
+            ('feat_reorder', 'false'),
+            ('feat_coupons', 'false'),
+            ('feat_referral', 'false'),
+            ('feat_stats', 'false'),
+            ('feat_vip', 'false'),
+            ('feat_faq', 'false'),
+            ('feat_live_support', 'false'),
+            ('feat_announcement', 'false'),
+            ('feat_bulk_order', 'false'),
+            ('feat_pwa', 'false'),
+            ('feat_analytics', 'false'),
+            ('feat_export', 'false'),
+            ('feat_bulk_notify', 'false'),
+            ('feat_coupon_mgr', 'false'),
+            ('feat_activity_log', 'false'),
+            ('feat_auto_api', 'false'),
+            ('feat_revenue', 'false'),
+            ('feat_block_user', 'false'),
+            ('feat_animations', 'false'),
+            ('feat_theme_color', 'false'),
+            ('feat_order_progress', 'false'),
+            ('feat_rich_notif', 'false'),
+            ('feat_service_redesign', 'false'),
         ]
         for key, value in default_settings:
             await conn.execute(
@@ -177,12 +233,12 @@ async def check_custom_username_exists(custom_username: str) -> bool:
         row = await conn.fetchval("SELECT 1 FROM users WHERE custom_username = $1", custom_username)
         return bool(row)
 
-async def create_user(telegram_id: int, first_name: str, username: str, custom_username: str):
+async def create_user(telegram_id: int, first_name: str, username: str, custom_username: str, referred_by: int = None):
     if not db_pool: return
     async with db_pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO users (telegram_id, first_name, username, custom_username) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
-            telegram_id, first_name, username, custom_username
+            "INSERT INTO users (telegram_id, first_name, username, custom_username, referred_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+            telegram_id, first_name, username, custom_username, referred_by
         )
 
 async def update_balance(telegram_id: int, amount: float):
@@ -205,7 +261,7 @@ async def get_all_users():
     if not db_pool: return []
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT telegram_id, first_name, username, custom_username, balance, joined_date FROM users ORDER BY joined_date DESC"
+            "SELECT telegram_id, first_name, username, custom_username, balance, joined_date, vip_level, is_blocked FROM users ORDER BY joined_date DESC"
         )
         return [dict(r) for r in rows]
 
@@ -451,4 +507,142 @@ async def mark_notifications_as_read(telegram_id: int):
             telegram_id
         )
         return True
+
+# ─── GROUP C: DEVELOPMENTS ──────────────────────────────────────────────────
+
+async def block_user(telegram_id: int, is_blocked: bool):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE users SET is_blocked = $1 WHERE telegram_id = $2",
+            is_blocked, telegram_id
+        )
+        return result == "UPDATE 1"
+
+async def update_vip_level(telegram_id: int, vip_level: int):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE users SET vip_level = $1 WHERE telegram_id = $2",
+            vip_level, telegram_id
+        )
+        return result == "UPDATE 1"
+
+async def get_coupons():
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM coupons ORDER BY created_at DESC")
+        return [dict(r) for r in rows]
+
+async def create_coupon(code: str, discount_percent: float, max_uses: int):
+    if not db_pool: return None
+    async with db_pool.acquire() as conn:
+        coupon_id = await conn.fetchval(
+            "INSERT INTO coupons (code, discount_percent, max_uses) VALUES ($1, $2, $3) RETURNING id",
+            code.upper().strip(), discount_percent, max_uses
+        )
+        return coupon_id
+
+async def delete_coupon(coupon_id: int):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute("DELETE FROM coupons WHERE id = $1", coupon_id)
+        return result == "DELETE 1"
+
+async def get_coupon(code: str):
+    if not db_pool: return None
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM coupons WHERE code = $1 AND is_active = TRUE", code.upper().strip())
+        return dict(row) if row else None
+
+async def use_coupon(coupon_id: int, user_id: int):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        async with conn.transaction():
+            # Check usage limit
+            coupon = await conn.fetchrow("SELECT current_uses, max_uses FROM coupons WHERE id = $1 FOR UPDATE", coupon_id)
+            if not coupon or coupon['current_uses'] >= coupon['max_uses']:
+                return False
+            
+            # Check if user already used this coupon
+            already_used = await conn.fetchval("SELECT 1 FROM coupon_uses WHERE coupon_id = $1 AND user_id = $2", coupon_id, user_id)
+            if already_used:
+                return False
+
+            await conn.execute("INSERT INTO coupon_uses (coupon_id, user_id) VALUES ($1, $2)", coupon_id, user_id)
+            await conn.execute("UPDATE coupons SET current_uses = current_uses + 1 WHERE id = $1", coupon_id)
+            return True
+
+async def add_referral_earnings(referrer_id: int, amount: float):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE users SET balance = balance + $1, referral_earnings = referral_earnings + $1 WHERE telegram_id = $2",
+                amount, referrer_id
+            )
+            # Create notification for referrer
+            await conn.execute(
+                "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+                referrer_id,
+                "Referans Kazancı!",
+                f"Referansınız olan bir kullanıcının siparişinden ₺{amount:.2f} kazandınız. Hesabınıza eklendi!"
+            )
+        return True
+
+async def get_referred_users(referrer_id: int):
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT telegram_id, first_name, username, custom_username, joined_date FROM users WHERE referred_by = $1 ORDER BY joined_date DESC",
+            referrer_id
+        )
+        return [dict(r) for r in rows]
+
+
+# ─── GROUP D: DEVELOPMENTS ──────────────────────────────────────────────────
+
+async def get_admin_analytics():
+    if not db_pool: return {}
+    async with db_pool.acquire() as conn:
+        total_users = await conn.fetchval("SELECT COUNT(*) FROM users")
+        total_orders = await conn.fetchval("SELECT COUNT(*) FROM orders")
+        total_revenue = await conn.fetchval("SELECT COALESCE(SUM(price), 0.0) FROM orders WHERE status != 'İptal Edildi'")
+        
+        pending_payments_count = await conn.fetchval("SELECT COUNT(*) FROM payment_requests WHERE status = 'Bekliyor'")
+        pending_payments_amount = await conn.fetchval("SELECT COALESCE(SUM(amount), 0.0) FROM payment_requests WHERE status = 'Bekliyor'")
+        
+        # Last 7 days sales
+        sales_rows = await conn.fetch("""
+            SELECT TO_CHAR(order_date, 'YYYY-MM-DD') as date, COALESCE(SUM(price), 0.0) as amount
+            FROM orders
+            WHERE order_date >= NOW() - INTERVAL '7 days' AND status != 'İptal Edildi'
+            GROUP BY DATE(order_date), TO_CHAR(order_date, 'YYYY-MM-DD')
+            ORDER BY DATE(order_date) ASC
+        """)
+        
+        sales_chart = [dict(r) for r in sales_rows]
+        return {
+            "total_users": total_users,
+            "total_orders": total_orders,
+            "total_revenue": total_revenue,
+            "pending_payments_count": pending_payments_count,
+            "pending_payments_amount": pending_payments_amount,
+            "sales_chart": sales_chart
+        }
+
+async def send_bulk_notification_db(title: str, message: str):
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT telegram_id FROM users")
+        user_ids = [r['telegram_id'] for r in rows]
+        
+        async with conn.transaction():
+            for uid in user_ids:
+                await conn.execute(
+                    "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+                    uid, title, message
+                )
+        return user_ids
+
 
