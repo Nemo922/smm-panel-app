@@ -172,10 +172,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     tg.ready();
 
-    // FEAT: PWA — Service Worker kaydı (feat_pwa aktifse)
-    if (appSettings.feat_pwa === 'true' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(err => {
-            console.warn('Service Worker kayıt hatası:', err);
+    // KÖKTEN ÖNBELLEK ÇÖZÜMÜ: Cihazlardaki tüm eski Service Worker önbelleklerini temizle ve unregister et
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+            for (let registration of registrations) {
+                registration.unregister();
+                console.log('Eski Service Worker başarıyla kaldırıldı.');
+            }
+        }).catch(err => {
+            console.warn('Service worker kaldırılamadı:', err);
         });
     }
 });
