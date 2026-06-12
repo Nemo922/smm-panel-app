@@ -237,6 +237,12 @@ function applySettings(settings) {
         refTabBtn.style.display = settings.feat_referral === 'true' ? 'flex' : 'none';
     }
 
+    // feat_spin_wheel: Şans Çarkı Tab Butonu
+    const spinTabBtn = document.getElementById('nav-spin');
+    if (spinTabBtn) {
+        spinTabBtn.style.display = settings.feat_spin_wheel === 'true' ? 'flex' : 'none';
+    }
+
     // feat_animations: Ekstra Animasyonlar
     if (settings.feat_animations === 'true') {
         document.body.classList.add('enhanced-animations');
@@ -950,7 +956,15 @@ function setupTabs() {
             item.classList.add('active');
             const activeIcon = item.querySelector('i');
             if (activeIcon) activeIcon.className = activeIcon.className.replace('ph ', 'ph-fill ');
-            showView(item.getAttribute('data-target'));
+            
+            const target = item.getAttribute('data-target');
+            showView(target);
+            
+            if (target === 'view-spin') {
+                checkSpinStatus();
+                drawWheel(wheelAngle);
+            }
+            
             window.scrollTo(0, 0);
         });
     });
@@ -3132,7 +3146,8 @@ async function loadAdminFeatures() {
                 { key: "feat_balance_history", label: "📒 Bakiye Geçmişi (Kullanıcı)", group: "Ekstra Özellikler" },
                 { key: "feat_order_note", label: "📝 Sipariş Notu Alanı", group: "Ekstra Özellikler" },
                 { key: "feat_theme_color", label: "🌈 Dinamik Tema Rengi", group: "Ekstra Özellikler" },
-                { key: "feat_rich_notif", label: "🔔 Zengin Push Bildirimler", group: "Ekstra Özellikler" }
+                { key: "feat_rich_notif", label: "🔔 Zengin Push Bildirimler", group: "Ekstra Özellikler" },
+                { key: "feat_spin_wheel", label: "🎯 Şans Çarkı (Lucky Spin)", group: "Ekstra Özellikler" }
             ];
 
             let currentGroup = "";
@@ -4290,6 +4305,229 @@ function escapeHtmlAdmin(str) {
                 loadSupportChatMessages(currentSupportUserId);
             } else {
                 loadAdminSupportMessages();
+            }
+        });
+    }
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// FEAT: ŞANS ÇARKI (feat_spin_wheel)
+// ═══════════════════════════════════════════════════════════════
+
+const SPIN_PRIZES_LOCAL = [
+    {"label": "₺1",       "type": "balance", "value": 1.0,  "color": "#6366f1"},
+    {"label": "₺2",       "type": "balance", "value": 2.0,  "color": "#22c55e"},
+    {"label": "₺5",       "type": "balance", "value": 5.0,  "color": "#f59e0b"},
+    {"label": "%10",      "type": "coupon",  "value": 10.0, "color": "#ec4899"},
+    {"label": "₺10",      "type": "balance", "value": 10.0, "color": "#3b82f6"},
+    {"label": "Tekrar!",  "type": "retry",   "value": 0.0,  "color": "#64748b"},
+    {"label": "₺25",      "type": "balance", "value": 25.0, "color": "#a855f7"},
+    {"label": "₺50",      "type": "balance", "value": 50.0, "color": "#ef4444"},
+];
+
+let isSpinning = false;
+let wheelAngle = 0;
+
+function drawWheel(angle = 0) {
+    const canvas = document.getElementById('wheel-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const numSegments = SPIN_PRIZES_LOCAL.length;
+    const arcSize = (2 * Math.PI) / numSegments;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw segments
+    for (let i = 0; i < numSegments; i++) {
+        const segAngle = angle + i * arcSize;
+        ctx.beginPath();
+        ctx.fillStyle = SPIN_PRIZES_LOCAL[i].color;
+        ctx.moveTo(140, 140);
+        ctx.arc(140, 140, 136, segAngle, segAngle + arcSize);
+        ctx.lineTo(140, 140);
+        ctx.fill();
+        
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        
+        ctx.save();
+        ctx.translate(140, 140);
+        ctx.rotate(segAngle + arcSize / 2);
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px Inter, sans-serif';
+        
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        
+        ctx.fillText(SPIN_PRIZES_LOCAL[i].label, 120, 0);
+        ctx.restore();
+    }
+    
+    // Draw outer premium ring
+    ctx.beginPath();
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 6;
+    ctx.arc(140, 140, 137, 0, 2 * Math.PI);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.arc(140, 140, 134, 0, 2 * Math.PI);
+    ctx.stroke();
+}
+
+function spinToPrize(prizeIndex, onComplete) {
+    if (isSpinning) return;
+    isSpinning = true;
+    
+    const canvas = document.getElementById('wheel-canvas');
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+    
+    const numSegments = SPIN_PRIZES_LOCAL.length;
+    const arcSize = (2 * Math.PI) / numSegments;
+    
+    // Target angle where the prize segment center meets -Math.PI / 2
+    const targetAngle = -Math.PI / 2 - (prizeIndex * arcSize + arcSize / 2);
+    
+    const totalSpins = 5 + Math.floor(Math.random() * 3);
+    const startAngle = wheelAngle % (2 * Math.PI);
+    const endAngle = startAngle + totalSpins * 2 * Math.PI + (targetAngle - startAngle);
+    
+    const duration = 4000; 
+    const startTime = performance.now();
+    
+    const pointerEl = document.querySelector('.wheel-pointer');
+    let lastSegmentIndex = -1;
+    
+    function animateSpin(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        const ease = 1 - Math.pow(1 - progress, 3);
+        wheelAngle = startAngle + ease * (endAngle - startAngle);
+        
+        drawWheel(wheelAngle);
+        
+        const currentNormalizedAngle = (wheelAngle + Math.PI / 2) % (2 * Math.PI);
+        const currentSeg = Math.floor((2 * Math.PI - currentNormalizedAngle) / arcSize) % numSegments;
+        if (currentSeg !== lastSegmentIndex && progress < 0.95) {
+            lastSegmentIndex = currentSeg;
+            if (pointerEl) {
+                pointerEl.classList.remove('tick');
+                void pointerEl.offsetWidth;
+                pointerEl.classList.add('tick');
+            }
+            if (tg.HapticFeedback && progress < 0.8) {
+                tg.HapticFeedback.impactOccurred('light');
+            }
+        }
+        
+        if (progress < 1) {
+            requestAnimationFrame(animateSpin);
+        } else {
+            isSpinning = false;
+            wheelAngle = endAngle;
+            drawWheel(wheelAngle);
+            if (onComplete) onComplete();
+        }
+    }
+    
+    requestAnimationFrame(animateSpin);
+}
+
+async function checkSpinStatus() {
+    if (!currentUserData) return;
+    try {
+        const res = await fetch(`/api/spin/status?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        
+        const btn = document.getElementById('btn-spin-wheel');
+        const statusBox = document.getElementById('spin-status-box');
+        const spinTabBtn = document.getElementById('nav-spin');
+        
+        if (spinTabBtn) {
+            spinTabBtn.style.display = data.enabled ? 'flex' : 'none';
+        }
+        
+        if (!data.enabled) {
+            if (btn) btn.disabled = true;
+            if (statusBox) statusBox.textContent = "Çark özelliği devre dışı.";
+            return;
+        }
+        
+        if (data.available) {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="ph-fill ph-play-circle" style="font-size: 20px;"></i> Çarkı Çevir!`;
+            }
+            if (statusBox) {
+                statusBox.style.background = 'rgba(34, 197, 94, 0.08)';
+                statusBox.style.borderColor = 'rgba(34, 197, 94, 0.2)';
+                statusBox.style.color = '#22c55e';
+                statusBox.textContent = "🎁 Çevirme hakkınız aktif! Şansınızı denemek için butona basın.";
+            }
+        } else {
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<i class="ph ph-clock" style="font-size: 20px;"></i> Yarın Tekrar Deneyin`;
+            }
+            if (statusBox) {
+                statusBox.style.background = 'rgba(99, 102, 241, 0.05)';
+                statusBox.style.borderColor = 'rgba(99, 102, 241, 0.15)';
+                statusBox.style.color = 'var(--tg-text-color)';
+                statusBox.textContent = "⏳ Bugün çarkı çevirdiniz. Yeni hakkınız yarın tanımlanacaktır.";
+            }
+        }
+    } catch (err) {
+        console.error("Çark durumu alınamadı:", err);
+    }
+}
+
+// Global button listener & Initial draw
+(function initSpinWheel() {
+    drawWheel(0);
+    const btn = document.getElementById('btn-spin-wheel');
+    if (btn) {
+        btn.addEventListener('click', async () => {
+            if (isSpinning || btn.disabled) return;
+            btn.disabled = true;
+            btn.textContent = "Çark Hazırlanıyor...";
+            
+            try {
+                const res = await fetch('/api/spin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: currentUserData.telegram_id })
+                });
+                
+                if (!res.ok) {
+                    const errData = await res.json();
+                    showAlert(errData.detail || "Çevirme işlemi başarısız.");
+                    checkSpinStatus();
+                    return;
+                }
+                
+                const data = await res.json();
+                if (data.success) {
+                    spinToPrize(data.prize_index, () => {
+                        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+                        showAlert(`🎉 ${data.message}`);
+                        checkSpinStatus();
+                        checkUserStatus(currentUserData.telegram_id);
+                    });
+                } else {
+                    showAlert(data.message || "Bir hata oluştu.");
+                    checkSpinStatus();
+                }
+            } catch (err) {
+                showAlert("Sunucu bağlantı hatası.");
+                checkSpinStatus();
             }
         });
     }

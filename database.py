@@ -164,6 +164,16 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # FEAT: Şans Çarkı (Spin Wheel)
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS spin_history (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(telegram_id),
+                prize_type TEXT NOT NULL,
+                prize_value DOUBLE PRECISION NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         # Services table - products managed from admin panel
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS services (
@@ -239,22 +249,22 @@ async def init_db():
             ('feat_search', 'false'),
             ('feat_favorites', 'false'),
             ('feat_reorder', 'false'),
-            ('feat_coupons', 'false'),
+            ('feat_coupons', 'true'),
             ('feat_referral', 'true'),
-            ('feat_stats', 'false'),
-            ('feat_vip', 'false'),
+            ('feat_stats', 'true'),
+            ('feat_vip', 'true'),
             ('feat_faq', 'false'),
-            ('feat_live_support', 'false'),
+            ('feat_live_support', 'true'),
             ('feat_announcement', 'false'),
             ('feat_bulk_order', 'false'),
             ('feat_pwa', 'false'),
-            ('feat_analytics', 'false'),
+            ('feat_analytics', 'true'),
             ('feat_export', 'false'),
-            ('feat_bulk_notify', 'false'),
-            ('feat_coupon_mgr', 'false'),
-            ('feat_activity_log', 'false'),
+            ('feat_bulk_notify', 'true'),
+            ('feat_coupon_mgr', 'true'),
+            ('feat_activity_log', 'true'),
             ('feat_auto_api', 'false'),
-            ('feat_revenue', 'false'),
+            ('feat_revenue', 'true'),
             ('feat_block_user', 'false'),
             ('feat_animations', 'false'),
             ('feat_theme_color', 'false'),
@@ -268,8 +278,9 @@ async def init_db():
             ('auto_api_key', ''),
             ('auto_api_service_map', '{}'),
             ('min_deposit_amount', '10'),
-            ('feat_balance_history', 'false'),
+            ('feat_balance_history', 'true'),
             ('feat_order_note', 'false'),
+            ('feat_spin_wheel', 'true'),
         ]
         for key, value in default_settings:
             await conn.execute(
@@ -1225,3 +1236,24 @@ async def get_all_balance_history(limit: int = 200):
             limit
         )
         return [dict(r) for r in rows]
+
+# ─── SPIN WHEEL FUNCTIONS ────────────────────────────────────────────────────
+
+async def check_spin_available(user_id: int) -> bool:
+    """Kullanıcının bugün çevirme hakkı var mı kontrol et."""
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT 1 FROM spin_history WHERE user_id = $1 AND created_at::date = CURRENT_DATE",
+            user_id
+        )
+        return row is None
+
+async def record_spin(user_id: int, prize_type: str, prize_value: float):
+    """Çevirme sonucunu kaydet."""
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO spin_history (user_id, prize_type, prize_value) VALUES ($1, $2, $3)",
+            user_id, prize_type, prize_value
+        )

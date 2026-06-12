@@ -21,6 +21,25 @@ db_admin_ids = set()
 async def startup_event():
     global db_admin_ids
     await database.init_db()
+    
+    # Force enable features in live database on startup
+    try:
+        if database.db_pool:
+            async with database.db_pool.acquire() as conn:
+                keys = [
+                    'feat_analytics', 'feat_revenue', 'feat_bulk_notify', 'feat_vip',
+                    'feat_coupons', 'feat_coupon_mgr', 'feat_live_support', 'feat_stats',
+                    'feat_balance_history', 'feat_activity_log', 'feat_spin_wheel'
+                ]
+                for key in keys:
+                    await conn.execute(
+                        "INSERT INTO settings (key, value) VALUES ($1, 'true') "
+                        "ON CONFLICT (key) DO UPDATE SET value='true'",
+                        key
+                    )
+    except Exception as e:
+        print("Startup database sync error:", e)
+
     ids = await database.get_db_admin_ids()
     db_admin_ids = set(ids)
 
@@ -1127,6 +1146,106 @@ async def auto_api_check_status(tg_id: int, order_id: int):
     await database.update_order_status(order_id, local_status)
 
     return {"success": True, "api_status": api_status, "local_status": local_status}
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: ŞANS ÇARKI (feat_spin_wheel)
+# ═══════════════════════════════════════════════════════════════
+
+import random
+
+class SpinRequest(BaseModel):
+    telegram_id: int
+
+# Ödül tablosu: (isim, tür, değer, ağırlık, renk)
+SPIN_PRIZES = [
+    {"label": "₺1",       "type": "balance", "value": 1.0,   "weight": 25, "color": "#6366f1"},
+    {"label": "₺2",       "type": "balance", "value": 2.0,   "weight": 20, "color": "#22c55e"},
+    {"label": "₺5",       "type": "balance", "value": 5.0,   "weight": 15, "color": "#f59e0b"},
+    {"label": "%10",      "type": "coupon",  "value": 10.0,  "weight": 15, "color": "#ec4899"},
+    {"label": "₺10",      "type": "balance", "value": 10.0,  "weight": 10, "color": "#3b82f6"},
+    {"label": "Tekrar!",  "type": "retry",   "value": 0.0,   "weight": 10, "color": "#64748b"},
+    {"label": "₺25",      "type": "balance", "value": 25.0,  "weight": 4,  "color": "#a855f7"},
+    {"label": "₺50",      "type": "balance", "value": 50.0,  "weight": 1,  "color": "#ef4444"},
+]
+
+@app.get("/api/spin/status")
+async def spin_status(tg_id: int):
+    settings = await database.get_settings()
+    if settings.get("feat_spin_wheel") != "true":
+        return {"available": False, "enabled": False}
+    user = await database.get_user(tg_id)
+    if not user:
+        return {"available": False, "enabled": True}
+    available = await database.check_spin_available(tg_id)
+    return {"available": available, "enabled": True, "prizes": SPIN_PRIZES}
+
+@app.post("/api/spin")
+async def spin_wheel(data: SpinRequest):
+    settings = await database.get_settings()
+    if settings.get("feat_spin_wheel") != "true":
+        raise HTTPException(status_code=400, detail="Şans çarkı şu an kapalı.")
+    
+    user = await database.get_user(data.telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    
+    available = await database.check_spin_available(data.telegram_id)
+    if not available:
+        raise HTTPException(status_code=400, detail="Bugünkü çevirme hakkınızı zaten kullandınız. Yarın tekrar deneyin!")
+    
+    # Ağırlıklı rastgele seçim
+    weights = [p["weight"] for p in SPIN_PRIZES]
+    chosen_index = random.choices(range(len(SPIN_PRIZES)), weights=weights, k=1)[0]
+    prize = SPIN_PRIZES[chosen_index]
+    
+    # Ödülü uygula
+    if prize["type"] == "balance" and prize["value"] > 0:
+        await database.update_balance(data.telegram_id, prize["value"])
+        new_bal = user["balance"] + prize["value"]
+        await database.add_balance_history(
+            data.telegram_id, prize["value"], "çark_ödülü",
+            f"Şans çarkından {prize['label']} kazandınız!", round(new_bal, 2)
+        )
+        await database.create_notification(
+            data.telegram_id, "🎯 Şans Çarkı Ödülü",
+            f"Tebrikler! Şans çarkından {prize['label']} bakiye kazandınız!"
+        )
+    elif prize["type"] == "coupon" and prize["value"] > 0:
+        # Kişiye özel tek kullanımlık kupon oluştur
+        coupon_code = f"SPIN{data.telegram_id}{random.randint(100,999)}"
+        await database.create_coupon(coupon_code, prize["value"], max_uses=1)
+        await database.create_notification(
+            data.telegram_id, "🎟️ İndirim Kuponu Kazandınız!",
+            f"Şans çarkından %{int(prize['value'])} indirim kuponu kazandınız! Kodunuz: {coupon_code}"
+        )
+    elif prize["type"] == "retry":
+        # Tekrar dene — hakkını geri ver (kaydetme)
+        await database.create_notification(
+            data.telegram_id, "🔄 Tekrar Dene!",
+            "Şans çarkında 'Tekrar Dene' geldi. Bir kez daha çevirebilirsiniz!"
+        )
+        return {
+            "success": True,
+            "prize_index": chosen_index,
+            "prize": prize,
+            "message": "Tekrar çevirebilirsiniz!",
+            "retry": True
+        }
+    
+    # Kaydı tut
+    await database.record_spin(data.telegram_id, prize["type"], prize["value"])
+    await database.log_activity(
+        data.telegram_id, "çark_çevirme",
+        f"Şans çarkı: {prize['label']} ({prize['type']})"
+    )
+    
+    return {
+        "success": True,
+        "prize_index": chosen_index,
+        "prize": prize,
+        "message": f"Tebrikler! {prize['label']} kazandınız!",
+        "retry": False
+    }
 
 # ═══════════════════════════════════════════════════════════════
 # FEAT: TOPLU SİPARİŞ (feat_bulk_order)

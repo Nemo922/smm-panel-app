@@ -1887,3 +1887,46 @@ body.enhanced-animations .category-chip:active {
     transform: scale(0.9) translateY(2px);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   FEAT: ŞANS ÇARKI (feat_spin_wheel)
+   ═══════════════════════════════════════════════════════════════ */
+.wheel-outer-wrapper {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    margin: 10px auto;
+}
+
+.wheel-pointer.tick {
+    animation: pointerTick 0.15s ease-in-out;
+}
+
+@keyframes pointerTick {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-15deg); }
+}
+
+#btn-spin-wheel:not(:disabled) {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+}
+
+#btn-spin-wheel:not(:disabled):active {
+    transform: scale(0.96);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+#btn-spin-wheel:disabled {
+    opacity: 0.6;
+    background: var(--tg-secondary-bg-color);
+    color: var(--tg-hint-color);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+#spin-status-box {
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
