@@ -1897,15 +1897,20 @@ async function loadAdminUsers() {
                     blockedText = ` · <span style="color:var(--color-danger);font-weight:700;">ENGELLESİ</span>`;
                 }
 
+                let adminText = '';
+                if (user.is_admin) {
+                    adminText = ` · <span style="color:#3b82f6;font-weight:700;"><i class="ph-fill ph-shield-star"></i> ADMİN</span>`;
+                }
+
                 card.innerHTML = `
                     <div class="admin-user-avatar">${(user.first_name || '?').charAt(0).toUpperCase()}</div>
                     <div class="admin-user-info">
                         <div class="admin-user-name">${user.first_name || 'Bilinmiyor'}</div>
-                        <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}${vipText}${blockedText}</div>
+                        <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}${vipText}${adminText}${blockedText}</div>
                         <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b></div>
                     </div>
                     <div style="display:flex; gap:6px;">
-                        <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}" data-vip="${user.vip_level || 0}" data-blocked="${user.is_blocked || false}">
+                        <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}" data-vip="${user.vip_level || 0}" data-blocked="${user.is_blocked || false}" data-admin="${user.is_admin || false}">
                             <i class="ph ph-pencil-simple"></i>
                         </button>
                         <button class="btn-add-balance" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: rgba(52, 199, 89, 0.12); color: var(--color-success); font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: opacity 0.2s;">
@@ -1918,7 +1923,7 @@ async function loadAdminUsers() {
             container.querySelectorAll('.btn-edit-user').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const b = e.currentTarget;
-                    openUserEditModal(b.dataset.tgid, b.dataset.name, b.dataset.balance, b.dataset.vip, b.dataset.blocked);
+                    openUserEditModal(b.dataset.tgid, b.dataset.name, b.dataset.balance, b.dataset.vip, b.dataset.blocked, b.dataset.admin);
                 });
             });
             container.querySelectorAll('.btn-add-balance').forEach(btn => {
@@ -1935,7 +1940,7 @@ async function loadAdminUsers() {
     }
 }
 
-function openUserEditModal(tgId, name, balance, vipLevel = 0, isBlocked = false) {
+function openUserEditModal(tgId, name, balance, vipLevel = 0, isBlocked = false, isAdmin = false) {
     document.getElementById('edit-user-tg-id').value = tgId;
     document.getElementById('edit-user-name').value = name;
     document.getElementById('edit-user-balance').value = parseFloat(balance).toFixed(2);
@@ -1954,6 +1959,9 @@ function openUserEditModal(tgId, name, balance, vipLevel = 0, isBlocked = false)
         blockGroup.style.display = appSettings.feat_block_user === 'true' ? 'block' : 'none';
         document.getElementById('edit-user-is-blocked').value = String(isBlocked) === 'true' ? 'true' : 'false';
     }
+
+    // Admin Group
+    document.getElementById('edit-user-is-admin').value = String(isAdmin) === 'true' ? 'true' : 'false';
 
     document.getElementById('user-edit-modal').classList.add('active');
 }
@@ -1995,6 +2003,14 @@ async function saveUser() {
                 body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, is_blocked: isBlocked })
             });
         }
+
+        // Save admin status
+        const isAdminStatus = document.getElementById('edit-user-is-admin').value === 'true';
+        await fetch('/api/admin/user/admin_role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_id: currentUserData.telegram_id, telegram_id: tgId, is_admin: isAdminStatus })
+        });
 
         document.getElementById('user-edit-modal').classList.remove('active');
         await loadAdminUsers();

@@ -37,6 +37,8 @@ async def init_db():
         except Exception: pass
         try: await conn.execute('ALTER TABLE users ADD COLUMN referral_earnings DOUBLE PRECISION DEFAULT 0.0')
         except Exception: pass
+        try: await conn.execute('ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE')
+        except Exception: pass
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id SERIAL PRIMARY KEY,
@@ -278,7 +280,7 @@ async def get_all_users():
     if not db_pool: return []
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT telegram_id, first_name, username, custom_username, balance, joined_date, vip_level, is_blocked FROM users ORDER BY joined_date DESC"
+            "SELECT telegram_id, first_name, username, custom_username, balance, joined_date, vip_level, is_blocked, is_admin FROM users ORDER BY joined_date DESC"
         )
         return [dict(r) for r in rows]
 
@@ -288,6 +290,24 @@ async def admin_update_user(telegram_id: int, balance: float, first_name: str):
         result = await conn.execute(
             "UPDATE users SET balance = $1, first_name = $2 WHERE telegram_id = $3",
             balance, first_name, telegram_id
+        )
+        return result == "UPDATE 1"
+
+async def get_db_admin_ids() -> list[int]:
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        try:
+            rows = await conn.fetch("SELECT telegram_id FROM users WHERE is_admin = TRUE")
+            return [r['telegram_id'] for r in rows]
+        except Exception:
+            return []
+
+async def update_admin_role(telegram_id: int, is_admin: bool):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE users SET is_admin = $1 WHERE telegram_id = $2",
+            is_admin, telegram_id
         )
         return result == "UPDATE 1"
 

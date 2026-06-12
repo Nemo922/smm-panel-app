@@ -821,6 +821,16 @@
                             <option value="true">Engellenmiş / Yasaklı</option>
                         </select>
                     </div>
+
+                    <!-- Yetki Durumu -->
+                    <div class="input-group" id="edit-user-admin-group">
+                        <label>Yetki Seviyesi</label>
+                        <select id="edit-user-is-admin" class="admin-select">
+                            <option value="false">Standart Kullanıcı</option>
+                            <option value="true">Yönetici (Admin)</option>
+                        </select>
+                        <small style="color:var(--tg-hint-color); font-size:11px; margin-top:4px; display:block;">Not: Kendi ana yetkinizi kaldıramazsınız.</small>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="tg-button primary full-width" id="btn-save-user">Kaydet</button>

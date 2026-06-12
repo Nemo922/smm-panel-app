@@ -14,10 +14,15 @@ TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = FastAPI(title="SMM Panel API")
 
+db_admin_ids = set()
+
 # --- VERİTABANI BAŞLATMA ---
 @app.on_event("startup")
 async def startup_event():
+    global db_admin_ids
     await database.init_db()
+    ids = await database.get_db_admin_ids()
+    db_admin_ids = set(ids)
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -37,7 +42,8 @@ async def send_telegram_message(chat_id: int, text: str):
 
 def get_admin_ids() -> list[int]:
     admins_str = os.getenv("ADMIN_TELEGRAM_IDS", "7910651923,12345")
-    return [int(x.strip()) for x in admins_str.split(',') if x.strip().isdigit()]
+    env_admins = {int(x.strip()) for x in admins_str.split(',') if x.strip().isdigit()}
+    return list(env_admins | db_admin_ids)
 
 def verify_admin(tg_id: int):
     if tg_id not in get_admin_ids():
@@ -96,6 +102,11 @@ class AdminAddBalance(BaseModel):
     telegram_id: int
     amount: float
     note: str
+
+class AdminUpdateAdminRole(BaseModel):
+    admin_id: int
+    telegram_id: int
+    is_admin: bool
 
 class AdminCreateService(BaseModel):
     admin_id: int
@@ -503,6 +514,27 @@ async def admin_update_user(data: AdminUpdateUser):
     success = await database.admin_update_user(data.telegram_id, data.balance, data.first_name)
     # Always return success since asyncpg UPDATE result checking can vary
     return {"success": True, "message": "Kullanıcı güncellendi."}
+
+@app.post("/api/admin/user/admin_role")
+async def admin_update_admin_role(data: AdminUpdateAdminRole):
+    verify_admin(data.admin_id)
+    
+    # Kendi ana yetkisini silmesini engelleme (Sadece Env Adminleri super admin kabul edelim)
+    admins_str = os.getenv("ADMIN_TELEGRAM_IDS", "7910651923,12345")
+    env_admins = [int(x.strip()) for x in admins_str.split(',') if x.strip().isdigit()]
+    
+    if data.telegram_id in env_admins and not data.is_admin:
+        raise HTTPException(status_code=400, detail="Ana yöneticinin (Super Admin) yetkisi kaldırılamaz.")
+        
+    success = await database.update_admin_role(data.telegram_id, data.is_admin)
+    if success:
+        global db_admin_ids
+        if data.is_admin:
+            db_admin_ids.add(data.telegram_id)
+        else:
+            db_admin_ids.discard(data.telegram_id)
+        return {"success": True, "message": "Yetki seviyesi güncellendi."}
+    raise HTTPException(status_code=400, detail="İşlem başarısız.")
 
 @app.post("/api/admin/user/add-balance")
 async def admin_add_balance(data: AdminAddBalance):
