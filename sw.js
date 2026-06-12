@@ -1,11 +1,10 @@
 // SMM Panel - Service Worker (feat_pwa)
-const CACHE_NAME = 'smm-panel-v1';
+const CACHE_NAME = 'smm-panel-v6';
 
-// Statik dosyalar — cache'e al
 const STATIC_ASSETS = [
     '/',
-    '/style.css',
-    '/app.js',
+    '/style.css?v=6',
+    '/app.js?v=6',
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
 ];
 
@@ -33,7 +32,7 @@ self.addEventListener('activate', event => {
     self.clients.claim();
 });
 
-// Fetch: API isteklerini network-first, statikleri cache-first yönet
+// Fetch: API isteklerini network-first, statikleri network-first (fallback to cache) yönet
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
@@ -50,22 +49,24 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // Statik dosyalar: cache-first, bulamazsa network
+    // Statik dosyalar: network-first, bulamazsa cache
     event.respondWith(
-        caches.match(event.request).then(cached => {
-            if (cached) return cached;
-            return fetch(event.request).then(response => {
-                // Sadece başarılı GET isteklerini cache'e al
-                if (
-                    event.request.method === 'GET' &&
-                    response.status === 200 &&
-                    response.type !== 'opaque'
-                ) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-                }
-                return response;
-            }).catch(() => cached || new Response('Çevrimdışı', { status: 503 }));
+        fetch(event.request).then(response => {
+            // Sadece başarılı GET isteklerini cache'e al
+            if (
+                event.request.method === 'GET' &&
+                response.status === 200 &&
+                response.type !== 'opaque'
+            ) {
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+            }
+            return response;
+        }).catch(() => {
+            return caches.match(event.request).then(cached => {
+                if (cached) return cached;
+                return new Response('Çevrimdışı', { status: 503 });
+            });
         })
     );
 });

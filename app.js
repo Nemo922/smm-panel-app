@@ -231,16 +231,24 @@ function applySettings(settings) {
     if (faqMenu) {
         faqMenu.style.display = settings.feat_faq === 'true' ? 'flex' : 'none';
     }
-    // feat_referral: Referans Kazanım Tab Butonu
+    // feat_referral: Referans Kazanım Butonları (nav ve menü)
     const refTabBtn = document.getElementById('nav-referral');
     if (refTabBtn) {
-        refTabBtn.style.display = settings.feat_referral === 'true' ? 'flex' : 'none';
+        refTabBtn.style.display = 'none'; // Alt menüden kaldırıldı
+    }
+    const refMenuProfile = document.getElementById('menu-referral-profile');
+    if (refMenuProfile) {
+        refMenuProfile.style.display = settings.feat_referral === 'true' ? 'flex' : 'none';
     }
 
-    // feat_spin_wheel: Şans Çarkı Tab Butonu
+    // feat_spin_wheel: Şans Çarkı Butonları (nav ve menü)
     const spinTabBtn = document.getElementById('nav-spin');
     if (spinTabBtn) {
-        spinTabBtn.style.display = settings.feat_spin_wheel === 'true' ? 'flex' : 'none';
+        spinTabBtn.style.display = 'none'; // Alt menüden kaldırıldı
+    }
+    const spinMenuProfile = document.getElementById('menu-spin');
+    if (spinMenuProfile) {
+        spinMenuProfile.style.display = settings.feat_spin_wheel === 'true' ? 'flex' : 'none';
     }
 
     // feat_animations: Ekstra Animasyonlar
@@ -392,7 +400,7 @@ function showBlockedScreen(reason) {
         </div>
 
         <!-- Destek FAB Butonu -->
-        <button id="support-fab-btn" onclick="openSupportChat()" style="
+        <button id="support-fab-btn" onclick="openUserSupportChat()" style="
             position:fixed; bottom:24px; right:24px; z-index:9999;
             width:60px; height:60px; border-radius:50%; border:none; cursor:pointer;
             background:linear-gradient(135deg, #3b82f6, #2563eb);
@@ -522,7 +530,7 @@ function showBlockedScreen(reason) {
     loadSupportMessages();
 }
 
-function openSupportChat() {
+function openUserSupportChat() {
     const modal = document.getElementById('support-chat-modal');
     if (!modal) return;
     modal.style.display = 'flex';
@@ -1109,13 +1117,51 @@ function renderServices(filterPlatform) {
 }
 
 function setupCategoryFilters() {
-    const chips = document.querySelectorAll('.category-chip');
+    const chips = document.querySelectorAll('.category-chip:not(.category-more-btn)');
+    
+    function setActiveCategory(cat) {
+        chips.forEach(c => c.classList.remove('active'));
+        const chip = document.querySelector(`.category-chip[data-cat="${cat}"]`);
+        if (chip) chip.classList.add('active');
+        
+        document.querySelectorAll('.dropdown-cat-item').forEach(c => c.classList.remove('active'));
+        const dropdownItem = document.querySelector(`.dropdown-cat-item[data-cat="${cat}"]`);
+        if (dropdownItem) dropdownItem.classList.add('active');
+        
+        renderServices(cat);
+    }
+
     chips.forEach(chip => {
         chip.addEventListener('click', () => {
             if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-            chips.forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            renderServices(chip.getAttribute('data-cat'));
+            setActiveCategory(chip.getAttribute('data-cat'));
+        });
+    });
+
+    const btnAllCategories = document.getElementById('btn-all-categories');
+    const allCategoriesDropdown = document.getElementById('all-categories-dropdown');
+    const closeAllCategories = document.getElementById('close-all-categories');
+
+    if (btnAllCategories && allCategoriesDropdown) {
+        btnAllCategories.addEventListener('click', () => {
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            allCategoriesDropdown.style.display = 'flex';
+        });
+    }
+
+    if (closeAllCategories && allCategoriesDropdown) {
+        closeAllCategories.addEventListener('click', () => {
+            allCategoriesDropdown.style.display = 'none';
+        });
+    }
+
+    document.querySelectorAll('.dropdown-cat-item').forEach(item => {
+        item.addEventListener('click', () => {
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            setActiveCategory(item.getAttribute('data-cat'));
+            if (allCategoriesDropdown) {
+                allCategoriesDropdown.style.display = 'none';
+            }
         });
     });
 
@@ -1123,7 +1169,7 @@ function setupCategoryFilters() {
     const searchInput = document.getElementById('service-search-input');
     if (searchInput) {
         searchInput.addEventListener('input', () => {
-            const activeChip = document.querySelector('.category-chip.active');
+            const activeChip = document.querySelector('.category-chip.active, .dropdown-cat-item.active');
             const cat = activeChip ? activeChip.getAttribute('data-cat') : 'all';
             renderServices(cat);
         });
@@ -1519,10 +1565,34 @@ function setupPaymentModal() {
 function setupProfileMenu() {
     const btnSupport = document.getElementById('menu-support');
     const btnTerms = document.getElementById('menu-terms');
+    const menuSpin = document.getElementById('menu-spin');
+    const menuReferralProfile = document.getElementById('menu-referral-profile');
+
+    if (menuSpin) {
+        menuSpin.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            showView('view-spin');
+            checkSpinStatus();
+            drawWheel(wheelAngle);
+            window.scrollTo(0, 0);
+        });
+    }
+
+    if (menuReferralProfile) {
+        menuReferralProfile.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            showView('view-referral');
+            window.scrollTo(0, 0);
+        });
+    }
+
     if (btnSupport) {
         btnSupport.addEventListener('click', (e) => {
             e.preventDefault();
-            showAlert("Destek talebi sistemi yakında aktif edilecektir.");
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            openUserSupportChat();
         });
     }
     if (btnTerms) {
@@ -3579,8 +3649,8 @@ document.getElementById('btn-submit-bulk-order')?.addEventListener('click', asyn
             body: JSON.stringify({
                 telegram_id: currentUserData.telegram_id,
                 service_id: _bulkServiceId,
-                links,
-                quantity: qty,
+                items: links.map(link => ({ link, quantity: qty })),
+                coupon_code: null
             })
         });
         const data = await res.json();
@@ -4449,15 +4519,17 @@ async function checkSpinStatus() {
         
         const btn = document.getElementById('btn-spin-wheel');
         const statusBox = document.getElementById('spin-status-box');
-        const spinTabBtn = document.getElementById('nav-spin');
+        const spinMenuProfile = document.getElementById('menu-spin');
+        const spinBadge = document.getElementById('spin-status-badge');
         
-        if (spinTabBtn) {
-            spinTabBtn.style.display = data.enabled ? 'flex' : 'none';
+        if (spinMenuProfile) {
+            spinMenuProfile.style.display = data.enabled ? 'flex' : 'none';
         }
         
         if (!data.enabled) {
             if (btn) btn.disabled = true;
             if (statusBox) statusBox.textContent = "Çark özelliği devre dışı.";
+            if (spinBadge) spinBadge.style.display = 'none';
             return;
         }
         
@@ -4472,6 +4544,9 @@ async function checkSpinStatus() {
                 statusBox.style.color = '#22c55e';
                 statusBox.textContent = "🎁 Çevirme hakkınız aktif! Şansınızı denemek için butona basın.";
             }
+            if (spinBadge) {
+                spinBadge.style.display = 'inline-block';
+            }
         } else {
             if (btn) {
                 btn.disabled = true;
@@ -4482,6 +4557,9 @@ async function checkSpinStatus() {
                 statusBox.style.borderColor = 'rgba(99, 102, 241, 0.15)';
                 statusBox.style.color = 'var(--tg-text-color)';
                 statusBox.textContent = "⏳ Bugün çarkı çevirdiniz. Yeni hakkınız yarın tanımlanacaktır.";
+            }
+            if (spinBadge) {
+                spinBadge.style.display = 'none';
             }
         }
     } catch (err) {
@@ -4517,7 +4595,17 @@ async function checkSpinStatus() {
                 if (data.success) {
                     spinToPrize(data.prize_index, () => {
                         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-                        showAlert(`🎉 ${data.message}`);
+                        
+                        // Show victory modal
+                        const victoryModal = document.getElementById('spin-victory-modal');
+                        const victoryMsg = document.getElementById('spin-victory-message');
+                        if (victoryModal && victoryMsg) {
+                            victoryMsg.textContent = data.message;
+                            victoryModal.style.display = 'flex';
+                        } else {
+                            showAlert(`🎉 ${data.message}`);
+                        }
+
                         checkSpinStatus();
                         checkUserStatus(currentUserData.telegram_id);
                     });
@@ -4529,6 +4617,14 @@ async function checkSpinStatus() {
                 showAlert("Sunucu bağlantı hatası.");
                 checkSpinStatus();
             }
+        });
+    }
+
+    const btnCloseVictory = document.getElementById('btn-close-spin-victory');
+    const victoryModal = document.getElementById('spin-victory-modal');
+    if (btnCloseVictory && victoryModal) {
+        btnCloseVictory.addEventListener('click', () => {
+            victoryModal.style.display = 'none';
         });
     }
 })();

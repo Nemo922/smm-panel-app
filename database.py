@@ -351,6 +351,23 @@ async def add_referral_commission(telegram_id: int, amount: float):
             amount, telegram_id
         )
 
+async def add_referral_reward(referrer_id: int, referred_username: str, referred_id: int, amount: float = 10.0):
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        new_balance = await conn.fetchval(
+            "UPDATE users SET balance = balance + $1, referral_earnings = referral_earnings + $1 WHERE telegram_id = $2 RETURNING balance",
+            amount, referrer_id
+        )
+        await conn.execute(
+            "INSERT INTO payment_requests (user_id, amount, payment_method, details, status) VALUES ($1, $2, $3, $4, $5)",
+            referrer_id, amount, "Referans Ödülü", f"Yeni kayıt: {referred_username} (ID: {referred_id})", "Onaylandı"
+        )
+        if new_balance is not None:
+            await conn.execute(
+                "INSERT INTO balance_history (user_id, amount, type, description, balance_after) VALUES ($1, $2, $3, $4, $5)",
+                referrer_id, amount, "referral", f"Referans Ödülü - {referred_username}", new_balance
+            )
+
 async def update_custom_username(telegram_id: int, custom_username: str):
     if not db_pool: return
     async with db_pool.acquire() as conn:

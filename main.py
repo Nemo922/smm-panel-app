@@ -265,6 +265,8 @@ async def register_user(data: RegisterUser):
             if ref_user and data.referred_by != data.telegram_id:
                 ref_by = data.referred_by
         await database.create_user(data.telegram_id, data.first_name, data.username, data.custom_username, ref_by)
+        if ref_by:
+            await database.add_referral_reward(ref_by, data.custom_username or data.first_name or "Yeni Kullanıcı", data.telegram_id, 10.0)
     else:
         await database.update_custom_username(data.telegram_id, data.custom_username)
     await database.log_activity(data.telegram_id, "kayıt", f"Kullanıcı adı: {data.custom_username}")

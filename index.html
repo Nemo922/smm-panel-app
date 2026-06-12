@@ -16,7 +16,7 @@
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=6">
     <!-- Chart.js library for feat_analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- FEAT: PWA Manifest (feat_pwa ile aktif olur, ama link her zaman ekli) -->
@@ -136,12 +136,33 @@
             <div class="categories-wrapper">
                 <div class="categories-scroll" id="category-list">
                     <button class="category-chip active" data-cat="all">🔥 Popüler</button>
-                    <!-- FEAT: Favoriler (Gizli, feat_favorites) -->
-                    <button class="category-chip" data-cat="favorites" id="feat-favorites-chip" style="display: none;"><i class="ph-fill ph-star" style="color:#f59e0b;"></i> Favoriler</button>
                     <button class="category-chip" data-cat="instagram"><i class="ph ph-instagram-logo"></i> Instagram</button>
                     <button class="category-chip" data-cat="tiktok"><i class="ph ph-tiktok-logo"></i> TikTok</button>
-                    <button class="category-chip" data-cat="twitter"><i class="ph ph-twitter-logo"></i> Twitter</button>
                     <button class="category-chip" data-cat="youtube"><i class="ph ph-youtube-logo"></i> YouTube</button>
+                    <button class="category-chip category-more-btn" id="btn-all-categories"><i class="ph ph-dots-three-outline"></i></button>
+                </div>
+            </div>
+
+            <!-- Tüm Kategoriler Dropdown Menü -->
+            <div class="all-categories-dropdown" id="all-categories-dropdown" style="display: none;">
+                <div class="categories-dropdown-header">
+                    <h4>Tüm Kategoriler</h4>
+                    <button class="categories-dropdown-close" id="close-all-categories"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="categories-dropdown-list" id="categories-dropdown-list">
+                    <button class="dropdown-cat-item" data-cat="all"><i class="ph ph-fire"></i> Popüler</button>
+                    <button class="dropdown-cat-item" data-cat="instagram"><i class="ph ph-instagram-logo"></i> Instagram</button>
+                    <button class="dropdown-cat-item" data-cat="tiktok"><i class="ph ph-tiktok-logo"></i> TikTok</button>
+                    <button class="dropdown-cat-item" data-cat="youtube"><i class="ph ph-youtube-logo"></i> YouTube</button>
+                    <button class="dropdown-cat-item" data-cat="twitter"><i class="ph ph-twitter-logo"></i> Twitter / X</button>
+                    <button class="dropdown-cat-item" data-cat="facebook"><i class="ph ph-facebook-logo"></i> Facebook</button>
+                    <button class="dropdown-cat-item" data-cat="telegram"><i class="ph ph-telegram-logo"></i> Telegram</button>
+                    <button class="dropdown-cat-item" data-cat="spotify"><i class="ph ph-spotify-logo"></i> Spotify</button>
+                    <button class="dropdown-cat-item" data-cat="discord"><i class="ph ph-discord-logo"></i> Discord</button>
+                    <button class="dropdown-cat-item" data-cat="twitch"><i class="ph ph-twitch-logo"></i> Twitch</button>
+                    <button class="dropdown-cat-item" data-cat="linkedin"><i class="ph ph-linkedin-logo"></i> LinkedIn</button>
+                    <button class="dropdown-cat-item" data-cat="soundcloud"><i class="ph ph-soundcloud-logo"></i> SoundCloud</button>
+                    <button class="dropdown-cat-item" data-cat="favorites" id="feat-favorites-chip" style="display: none;"><i class="ph-fill ph-star" style="color:#f59e0b;"></i> Favoriler</button>
                 </div>
             </div>
 
@@ -225,7 +246,7 @@
                     </div>
                     <h3 style="font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--tg-text-color);">Arkadaşlarını Davet Et, Kazan!</h3>
                     <p style="font-size: 12px; color: var(--tg-hint-color); max-width: 280px; margin: 0 auto; line-height: 1.4;">
-                        Referans linkinizle kayıt olan üyelerin bakiye yüklemelerinden anında komisyon kazanın.
+                        Referans linkinizle kayıt olan her arkadaşınız için anında 10 TL kazanın!
                     </p>
                 </div>
 
@@ -239,11 +260,11 @@
 
                 <div style="background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.1); border-radius: 12px; padding: 14px; margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 12px; color: var(--tg-hint-color);">Komisyon Oranı:</span>
-                        <span style="font-size: 13px; font-weight: 700; color: var(--tg-button-color);" id="ref-bonus-percent-text-dedicated">%5</span>
+                        <span style="font-size: 12px; color: var(--tg-hint-color);">Referans Ödülü:</span>
+                        <span style="font-size: 13px; font-weight: 700; color: var(--tg-button-color);">10 TL</span>
                     </div>
                     <div style="font-size: 11px; color: var(--tg-hint-color); line-height: 1.4;">
-                        * Davet ettiğiniz kişi sisteme her bakiye yüklediğinde, yatırdığı tutarın %5'i kadar bakiye cüzdanınıza otomatik hediye olarak eklenir.
+                        * Davet ettiğiniz kişi sisteme kayıt olduğunda 10 TL bakiye cüzdanınıza otomatik hediye olarak eklenir.
                     </div>
                 </div>
 
@@ -328,6 +349,24 @@
                     <span style="color: var(--color-danger); font-weight: 600;">Yönetici Paneli</span>
                     <i class="ph ph-caret-right" style="color: var(--color-danger);"></i>
                 </a>
+
+                <!-- Şans Çarkı (profile'dan erişim) -->
+                <a href="#" class="menu-item" id="menu-spin" style="display: none;">
+                    <div class="menu-icon" style="background: rgba(99,102,241,0.1); color: #6366f1;"><i class="ph ph-aperture"></i></div>
+                    <span>Şans Çarkı</span>
+                    <div style="margin-left: auto; display: flex; align-items: center; gap: 6px;">
+                        <span class="spin-status-badge" id="spin-status-badge" style="display: none; background: rgba(34,197,94,0.12); color: #22c55e; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 12px;">Hak var!</span>
+                        <i class="ph ph-caret-right"></i>
+                    </div>
+                </a>
+
+                <!-- Kazan & Paylaş (profile'dan erişim) -->
+                <a href="#" class="menu-item" id="menu-referral-profile" style="display: none;">
+                    <div class="menu-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;"><i class="ph ph-gift"></i></div>
+                    <span>Kazan & Paylaş</span>
+                    <i class="ph ph-caret-right"></i>
+                </a>
+
                 <a href="#" class="menu-item" id="menu-support">
                     <div class="menu-icon"><i class="ph ph-headset"></i></div>
                     <span>Destek Talebi Oluştur</span>
@@ -1075,6 +1114,7 @@
                 <i class="ph ph-receipt"></i>
                 <span>Siparişler</span>
             </a>
+            <!-- Kazan ve Çark artık profile taşındı, burada gizli kalıyorlar -->
             <a href="#" class="nav-item" data-target="view-referral" id="nav-referral" style="display: none;">
                 <i class="ph ph-gift"></i>
                 <span>Kazan</span>
@@ -1144,6 +1184,16 @@
                 <div class="modal-footer">
                     <button class="tg-button primary full-width" id="btn-submit-order">Siparişi Onayla</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Şans Çarkı Tebrikler Modalı -->
+        <div class="modal-overlay" id="spin-victory-modal" style="display: none;">
+            <div class="modal-content" style="text-align: center; padding: 30px 20px;">
+                <div style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+                <h3 style="font-size: 24px; font-weight: 800; color: var(--tg-text-color); margin-bottom: 8px;">Tebrikler!</h3>
+                <p id="spin-victory-message" style="font-size: 16px; color: var(--tg-hint-color); margin-bottom: 24px; line-height: 1.5;">Kazandığınız ödül hesabınıza eklendi.</p>
+                <button class="tg-button primary full-width" id="btn-close-spin-victory" style="margin: 0; padding: 14px; font-size: 16px; font-weight: 700;">Harika!</button>
             </div>
         </div>
 
@@ -1489,6 +1539,6 @@
     </div>
 
     <!-- Custom JS -->
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>
