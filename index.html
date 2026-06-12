@@ -594,6 +594,126 @@
             </div>
         </div>
 
+        <!-- Hizmet Şartları Modalı -->
+        <div class="modal-overlay" id="terms-modal">
+            <div class="modal-content" style="max-height: 88vh; display: flex; flex-direction: column;">
+                <div class="modal-header">
+                    <h3><i class="ph ph-scroll" style="margin-right:8px; color:var(--tg-button-color);"></i>Hizmet Şartları</h3>
+                    <button class="close-modal" id="close-terms-modal"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body" id="terms-body" style="overflow-y: auto; flex: 1; padding-bottom: 16px;">
+
+                    <div class="terms-intro">
+                        <p>Bu platformu kullanmadan önce lütfen aşağıdaki hizmet şartlarını dikkatlice okuyunuz. Platforma kayıt olarak veya hizmetlerimizi kullanarak bu şartları kabul etmiş sayılırsınız.</p>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon"><i class="ph-fill ph-shopping-cart"></i></div>
+                            <h4>1. Sipariş ve Hizmet Koşulları</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Tüm siparişler anında sisteme işlenmekte olup iptal talebi sipariş başladıktan sonra kabul edilmeyebilir.</li>
+                            <li>Verilen link veya kullanıcı adının doğru ve erişime açık olduğundan emin olmanız zorunludur.</li>
+                            <li>Gizli, kilitli veya silinmiş hesaplara verilen siparişler için iade yapılmaz.</li>
+                            <li>Sipariş tamamlanma süreleri tahminidir; kesin bir teslimat süresi garantisi verilmemektedir.</li>
+                            <li>Aynı anda birden fazla kaynaktan aynı hesap/gönderi için sipariş verilmesi hizmet kalitesini olumsuz etkileyebilir.</li>
+                            <li>Minimum ve maksimum sipariş miktarlarına uyulması zorunludur.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon" style="background: rgba(34,197,94,0.12); color: var(--color-success);"><i class="ph-fill ph-wallet"></i></div>
+                            <h4>2. Ödeme ve Bakiye Yükleme</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Bakiye yüklemeleri yönetici onayı ile gerçekleşir; onay süresi ödeme yöntemine göre değişiklik gösterebilir.</li>
+                            <li>Hatalı veya eksik ödeme bildirimi yapılması halinde yöneticimizle iletişime geçmeniz gerekmektedir.</li>
+                            <li>Yüklenen bakiyeler Türk Lirası (₺) cinsinden tutulur ve iade edilmez.</li>
+                            <li>Sahte veya manipüle edilmiş ödeme bildirimleri tespit edildiğinde hesap kalıcı olarak kapatılır ve yasal işlem başlatılır.</li>
+                            <li>Kripto para ile yapılan ödemelerde anlık kur farkından doğan farklılıklardan platform sorumlu değildir.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon" style="background: rgba(239,68,68,0.12); color: var(--color-danger);"><i class="ph-fill ph-arrow-u-up-left"></i></div>
+                            <h4>3. İade ve İptal Politikası</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Yanlış bağlantı ile verilen siparişlerde iade yapılmaz; lütfen siparişinizi onaylamadan önce linki kontrol ediniz.</li>
+                            <li>Teknik aksaklık nedeniyle tamamlanamayan siparişlerde bakiye iadesi yapılır.</li>
+                            <li>İptal edilen siparişlerde iade tutarı, hizmetin tamamlanmamış kısmı oranında hesaplanır.</li>
+                            <li>İade talepleri destek kanalımız üzerinden iletilmeli; yönetici değerlendirmesinin ardından sonuçlandırılır.</li>
+                            <li>Yüklenen bakiyeler nakit olarak iade edilmez; yalnızca hesap bakiyesi olarak geri yüklenir.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon" style="background: rgba(251,146,60,0.12); color: #f97316;"><i class="ph-fill ph-shield-warning"></i></div>
+                            <h4>4. Kabul Edilebilir Kullanım</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Platform yalnızca yasal sosyal medya büyüme hizmetleri amacıyla kullanılabilir.</li>
+                            <li>Nefret söylemi, şiddet, müstehcenlik veya yasadışı içerik barındıran hesaplara hizmet verilmez.</li>
+                            <li>Kamu kurumları, siyasi kişilikler veya rekabetçi faaliyetler kapsamında sistemi kötüye kullanmak yasaktır.</li>
+                            <li>Hesap erişim bilgilerinizi üçüncü şahıslarla paylaşmamanız önerilir; yaşanacak zararlardan platform sorumlu değildir.</li>
+                            <li>Tek kullanıcının birden fazla hesap açması durumunda her iki hesap da askıya alınabilir.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon" style="background: rgba(99,102,241,0.12); color: #6366f1;"><i class="ph-fill ph-info"></i></div>
+                            <h4>5. Sorumluluk Reddi</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Sosyal medya platformlarının algoritma değişikliklerinden kaynaklanan düşüşlerden sorumluluğumuz bulunmamaktadır.</li>
+                            <li>Hizmet kalitesi zaman zaman üçüncü taraf tedarikçilere bağlıdır; bu nedenle kısmi aksaklıklar yaşanabilir.</li>
+                            <li>Mücbir sebeplerden (doğal afet, teknik çöküş, platform yasakları vb.) kaynaklanan gecikmeler için tazminat ödenmez.</li>
+                            <li>Platform, önceden haber vermeksizin fiyat, hizmet kapsamı veya çalışma saatlerinde değişiklik yapma hakkını saklı tutar.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon" style="background: rgba(20,184,166,0.12); color: #14b8a6;"><i class="ph-fill ph-lock"></i></div>
+                            <h4>6. Gizlilik ve Veri Güvenliği</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Telegram kimliğiniz ve sipariş geçmişiniz yalnızca hizmet sunumu amacıyla saklanır.</li>
+                            <li>Kişisel verileriniz hiçbir koşul altında üçüncü taraflarla ticari amaçlı paylaşılmaz.</li>
+                            <li>Platform, Telegram'ın veri işleme koşullarına uygun olarak faaliyet göstermektedir.</li>
+                            <li>Hesabınızı kapatmak istediğinizde tüm verilerinizin silinmesini talep edebilirsiniz.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <div class="terms-section-header">
+                            <div class="terms-icon" style="background: rgba(168,85,247,0.12); color: #a855f7;"><i class="ph-fill ph-scales"></i></div>
+                            <h4>7. Hesap Askıya Alma ve Fesih</h4>
+                        </div>
+                        <ul class="terms-list">
+                            <li>Bu şartların ihlali halinde hesabınız uyarısız olarak askıya alınabilir veya kapatılabilir.</li>
+                            <li>Askıya alınan hesaplardaki kalan bakiye, ihlal tespiti halinde iade edilmeyebilir.</li>
+                            <li>İtiraz ve şikayetleriniz için destek kanalımızı kullanmanız gerekmektedir.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-footer">
+                        <i class="ph ph-calendar-blank"></i>
+                        <span>Son güncelleme: Haziran 2025 &nbsp;|&nbsp; Bu şartları kullanarak kabul etmiş sayılırsınız.</span>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-terms-accept">Anladım ve Kabul Ediyorum</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <!-- Custom Scripts -->

@@ -654,9 +654,32 @@ function setupProfileMenu() {
     if (btnTerms) {
         btnTerms.addEventListener('click', (e) => {
             e.preventDefault();
-            showAlert("Hizmet şartları yakında yayınlanacaktır.");
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            const termsModal = document.getElementById('terms-modal');
+            if (termsModal) {
+                // Scroll to top when opening
+                const termsBody = document.getElementById('terms-body');
+                if (termsBody) termsBody.scrollTop = 0;
+                termsModal.classList.add('active');
+            }
         });
     }
+
+    // Terms modal close handlers
+    const termsModal = document.getElementById('terms-modal');
+    const closeTermsBtn = document.getElementById('close-terms-modal');
+    const acceptTermsBtn = document.getElementById('btn-terms-accept');
+
+    function closeTermsModal() {
+        if (termsModal) termsModal.classList.remove('active');
+    }
+
+    if (closeTermsBtn) closeTermsBtn.addEventListener('click', (e) => { e.stopPropagation(); closeTermsModal(); });
+    if (acceptTermsBtn) acceptTermsBtn.addEventListener('click', () => {
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+        closeTermsModal();
+    });
+    if (termsModal) termsModal.addEventListener('click', (e) => { if (e.target === termsModal) closeTermsModal(); });
 }
 
 // ═══════════════════════════════════════════════════════════════
