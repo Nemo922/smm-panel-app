@@ -37,6 +37,8 @@ async def init_db():
         except Exception: pass
         try: await conn.execute('ALTER TABLE users ADD COLUMN referral_earnings DOUBLE PRECISION DEFAULT 0.0')
         except Exception: pass
+        try: await conn.execute('ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE')
+        except Exception: pass
         try: await conn.execute('ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE')
         except Exception: pass
         await conn.execute('''
@@ -57,6 +59,10 @@ async def init_db():
             pass
         try:
             await conn.execute('ALTER TABLE orders ADD COLUMN keep_visible BOOLEAN DEFAULT FALSE')
+        except Exception:
+            pass
+        try:
+            await conn.execute('ALTER TABLE orders ADD COLUMN user_note TEXT')
         except Exception:
             pass
         await conn.execute('''
@@ -120,6 +126,44 @@ async def init_db():
             await conn.execute("ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS sender TEXT DEFAULT 'user'")
         except Exception:
             pass
+
+        # FEAT: Bakiye Geçmişi tablosu
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS balance_history (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT REFERENCES users(telegram_id),
+                amount DOUBLE PRECISION NOT NULL,
+                type TEXT NOT NULL,
+                description TEXT,
+                balance_after DOUBLE PRECISION,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # FEAT: Activity Log - Kullanıcı işlem geçmişi
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                action TEXT NOT NULL,
+                detail TEXT,
+                ip TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # FEAT: Auto API - Harici SMM API entegrasyonu
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS external_api_orders (
+                id SERIAL PRIMARY KEY,
+                order_id INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+                provider TEXT NOT NULL,
+                external_order_id TEXT,
+                status TEXT DEFAULT 'pending',
+                last_checked TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         # Services table - products managed from admin panel
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS services (
@@ -220,6 +264,12 @@ async def init_db():
             ('support_chat_enabled', 'true'),
             ('app_url', ''),
             ('bot_username', ''),
+            ('auto_api_url', ''),
+            ('auto_api_key', ''),
+            ('auto_api_service_map', '{}'),
+            ('min_deposit_amount', '10'),
+            ('feat_balance_history', 'false'),
+            ('feat_order_note', 'false'),
         ]
         for key, value in default_settings:
             await conn.execute(
@@ -259,10 +309,11 @@ async def check_custom_username_exists(custom_username: str) -> bool:
 
 async def create_user(telegram_id: int, first_name: str, username: str, custom_username: str, referred_by: int = None):
     if not db_pool: return
+    referral_code = f"REF{telegram_id}"
     async with db_pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO users (telegram_id, first_name, username, custom_username, referred_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
-            telegram_id, first_name, username, custom_username, referred_by
+            "INSERT INTO users (telegram_id, first_name, username, custom_username, referred_by, referral_code) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+            telegram_id, first_name, username, custom_username, referred_by, referral_code
         )
 
 async def update_balance(telegram_id: int, amount: float):
@@ -270,6 +321,14 @@ async def update_balance(telegram_id: int, amount: float):
     async with db_pool.acquire() as conn:
         await conn.execute(
             "UPDATE users SET balance = balance + $1 WHERE telegram_id = $2",
+            amount, telegram_id
+        )
+
+async def add_referral_commission(telegram_id: int, amount: float):
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET balance = balance + $1, referral_earnings = referral_earnings + $1 WHERE telegram_id = $2",
             amount, telegram_id
         )
 
@@ -318,12 +377,12 @@ async def update_admin_role(telegram_id: int, is_admin: bool):
 
 # ─── ORDER FUNCTIONS ─────────────────────────────────────────────────────────
 
-async def create_order(user_id: int, service_id: int, link: str, quantity: int, price: float):
+async def create_order(user_id: int, service_id: int, link: str, quantity: int, price: float, user_note: str = None):
     if not db_pool: return None
     async with db_pool.acquire() as conn:
         order_id = await conn.fetchval(
-            "INSERT INTO orders (user_id, service_id, link, quantity, price) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-            user_id, service_id, link, quantity, price
+            "INSERT INTO orders (user_id, service_id, link, quantity, price, user_note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+            user_id, service_id, link, quantity, price, user_note
         )
         return order_id
 
@@ -387,10 +446,10 @@ async def cancel_order(order_id: int, note: str = None):
 
 
 async def update_order_status(order_id: int, status: str):
-    if not db_pool: return False
+    if not db_pool: return None
     async with db_pool.acquire() as conn:
-        result = await conn.execute("UPDATE orders SET status = $1 WHERE id = $2", status, order_id)
-        return result == "UPDATE 1"
+        row = await conn.fetchrow("UPDATE orders SET status = $1 WHERE id = $2 RETURNING user_id", status, order_id)
+        return row['user_id'] if row else None
 
 # ─── SERVICE FUNCTIONS ───────────────────────────────────────────────────────
 
@@ -405,6 +464,41 @@ async def get_active_services():
     async with db_pool.acquire() as conn:
         rows = await conn.fetch("SELECT * FROM services WHERE is_active = TRUE ORDER BY sort_order, id")
         return [dict(r) for r in rows]
+
+async def get_advanced_analytics():
+    if not db_pool: return {}
+    async with db_pool.acquire() as conn:
+        # Top selling services
+        top_services = await conn.fetch("""
+            SELECT s.name, COUNT(o.id) as order_count, SUM(o.price) as revenue
+            FROM orders o
+            JOIN services s ON o.service_id = s.id
+            WHERE o.status != 'İptal Edildi'
+            GROUP BY s.id, s.name
+            ORDER BY order_count DESC
+            LIMIT 5
+        """)
+        
+        # Last 7 days revenue
+        daily_revenue = await conn.fetch("""
+            SELECT DATE(order_date) as date, SUM(price) as revenue
+            FROM orders
+            WHERE order_date >= CURRENT_DATE - INTERVAL '7 days' AND status != 'İptal Edildi'
+            GROUP BY DATE(order_date)
+            ORDER BY date ASC
+        """)
+        
+        # Total users with balance
+        active_wallets = await conn.fetchrow("""
+            SELECT COUNT(*) as count, SUM(balance) as total_balance
+            FROM users WHERE balance > 0
+        """)
+        
+        return {
+            "top_services": [dict(r) for r in top_services],
+            "daily_revenue": [dict(r) for r in daily_revenue],
+            "active_wallets": dict(active_wallets) if active_wallets else {"count": 0, "total_balance": 0.0}
+        }
 
 async def create_service(platform: str, name: str, description: str, price_per_1000: float, min_order: int, max_order: int, icon: str):
     if not db_pool: return None
@@ -806,3 +900,305 @@ async def reply_support_message(msg_id: int, reply: str):
         return True
 
 
+# ─── ACTIVITY LOG FUNCTIONS ──────────────────────────────────────────────────
+
+async def log_activity(user_id: int, action: str, detail: str = None, ip: str = None):
+    """Kullanıcı işlemini loga yaz. Hata olursa sessizce devam et."""
+    if not db_pool: return
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO activity_log (user_id, action, detail, ip) VALUES ($1, $2, $3, $4)",
+                user_id, action, detail, ip
+            )
+    except Exception:
+        pass  # Log hatası hiçbir işlemi engellemez
+
+async def get_activity_log(user_id: int = None, limit: int = 100):
+    """Activity log kayıtlarını döndür. user_id verilirse o kullanıcıya ait filtrelenir."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        if user_id:
+            rows = await conn.fetch("""
+                SELECT al.*, u.first_name, u.custom_username
+                FROM activity_log al
+                LEFT JOIN users u ON al.user_id = u.telegram_id
+                WHERE al.user_id = $1
+                ORDER BY al.created_at DESC
+                LIMIT $2
+            """, user_id, limit)
+        else:
+            rows = await conn.fetch("""
+                SELECT al.*, u.first_name, u.custom_username
+                FROM activity_log al
+                LEFT JOIN users u ON al.user_id = u.telegram_id
+                ORDER BY al.created_at DESC
+                LIMIT $1
+            """, limit)
+        return [dict(r) for r in rows]
+
+async def clear_old_activity_log(days: int = 30):
+    """30 günden eski log kayıtlarını temizle."""
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM activity_log WHERE created_at < NOW() - INTERVAL '$1 days'",
+            days
+        )
+
+# ─── REVENUE REPORT FUNCTIONS ────────────────────────────────────────────────
+
+async def get_revenue_report(period: str = "monthly"):
+    """
+    Gelir raporu döndür.
+    period: 'daily' (son 30 gün günlük), 'monthly' (son 12 ay aylık), 'yearly' (tüm zamanlar yıllık)
+    """
+    if not db_pool: return {"rows": [], "summary": {}}
+    async with db_pool.acquire() as conn:
+        if period == "daily":
+            rows = await conn.fetch("""
+                SELECT
+                    DATE(order_date)                          AS period,
+                    COUNT(*)                                  AS order_count,
+                    COALESCE(SUM(price), 0)                   AS revenue,
+                    COUNT(*) FILTER (WHERE status='İptal Edildi') AS cancelled_count,
+                    COALESCE(SUM(price) FILTER (WHERE status='İptal Edildi'), 0) AS cancelled_amount
+                FROM orders
+                WHERE order_date >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY DATE(order_date)
+                ORDER BY DATE(order_date) ASC
+            """)
+            label = "Son 30 Gün (Günlük)"
+        elif period == "monthly":
+            rows = await conn.fetch("""
+                SELECT
+                    TO_CHAR(order_date, 'YYYY-MM')            AS period,
+                    COUNT(*)                                  AS order_count,
+                    COALESCE(SUM(price), 0)                   AS revenue,
+                    COUNT(*) FILTER (WHERE status='İptal Edildi') AS cancelled_count,
+                    COALESCE(SUM(price) FILTER (WHERE status='İptal Edildi'), 0) AS cancelled_amount
+                FROM orders
+                WHERE order_date >= NOW() - INTERVAL '12 months'
+                GROUP BY TO_CHAR(order_date, 'YYYY-MM')
+                ORDER BY period ASC
+            """)
+            label = "Son 12 Ay (Aylık)"
+        else:  # yearly
+            rows = await conn.fetch("""
+                SELECT
+                    TO_CHAR(order_date, 'YYYY')               AS period,
+                    COUNT(*)                                  AS order_count,
+                    COALESCE(SUM(price), 0)                   AS revenue,
+                    COUNT(*) FILTER (WHERE status='İptal Edildi') AS cancelled_count,
+                    COALESCE(SUM(price) FILTER (WHERE status='İptal Edildi'), 0) AS cancelled_amount
+                FROM orders
+                GROUP BY TO_CHAR(order_date, 'YYYY')
+                ORDER BY period ASC
+            """)
+            label = "Tüm Zamanlar (Yıllık)"
+
+        # Özet istatistikler
+        summary = await conn.fetchrow("""
+            SELECT
+                COALESCE(SUM(price) FILTER (WHERE status != 'İptal Edildi'), 0) AS total_revenue,
+                COUNT(*) FILTER (WHERE status != 'İptal Edildi')                AS total_orders,
+                COALESCE(SUM(price) FILTER (WHERE status  = 'İptal Edildi'), 0) AS total_refunded,
+                COUNT(*) FILTER (WHERE status  = 'İptal Edildi')                AS total_cancelled,
+                COALESCE(AVG(price)  FILTER (WHERE status != 'İptal Edildi'), 0) AS avg_order_value
+            FROM orders
+        """)
+
+        return {
+            "label": label,
+            "period": period,
+            "rows": [dict(r) for r in rows],
+            "summary": dict(summary) if summary else {}
+        }
+
+
+
+# ─── REVENUE REPORT FUNCTIONS ────────────────────────────────────────────────
+
+async def get_revenue_report():
+    """Gelir raporu için kapsamlı istatistikler döndür."""
+    if not db_pool: return {}
+    async with db_pool.acquire() as conn:
+        # Toplam ciro (iptal edilmeyenler)
+        total_revenue = await conn.fetchval(
+            "SELECT COALESCE(SUM(price), 0.0) FROM orders WHERE status != 'İptal Edildi'"
+        )
+        # Toplam iade
+        total_refund = await conn.fetchval(
+            "SELECT COALESCE(SUM(price), 0.0) FROM orders WHERE status = 'İptal Edildi'"
+        )
+        # Bu ay ciro
+        monthly_revenue = await conn.fetchval("""
+            SELECT COALESCE(SUM(price), 0.0) FROM orders
+            WHERE status != 'İptal Edildi'
+              AND order_date >= DATE_TRUNC('month', CURRENT_DATE)
+        """)
+        # Bu hafta ciro
+        weekly_revenue = await conn.fetchval("""
+            SELECT COALESCE(SUM(price), 0.0) FROM orders
+            WHERE status != 'İptal Edildi'
+              AND order_date >= CURRENT_DATE - INTERVAL '7 days'
+        """)
+        # Bugün ciro
+        daily_revenue = await conn.fetchval("""
+            SELECT COALESCE(SUM(price), 0.0) FROM orders
+            WHERE status != 'İptal Edildi'
+              AND order_date >= CURRENT_DATE
+        """)
+        # Son 30 günlük günlük ciro
+        daily_breakdown = await conn.fetch("""
+            SELECT DATE(order_date) as date,
+                   COALESCE(SUM(price), 0.0) as revenue,
+                   COUNT(*) as order_count
+            FROM orders
+            WHERE order_date >= CURRENT_DATE - INTERVAL '30 days'
+              AND status != 'İptal Edildi'
+            GROUP BY DATE(order_date)
+            ORDER BY date ASC
+        """)
+        # Platform bazlı ciro
+        platform_revenue = await conn.fetch("""
+            SELECT s.platform,
+                   COALESCE(SUM(o.price), 0.0) as revenue,
+                   COUNT(o.id) as order_count
+            FROM orders o
+            JOIN services s ON o.service_id = s.id
+            WHERE o.status != 'İptal Edildi'
+            GROUP BY s.platform
+            ORDER BY revenue DESC
+        """)
+        # Onaylanan toplam bakiye yükleme
+        total_deposits = await conn.fetchval(
+            "SELECT COALESCE(SUM(amount), 0.0) FROM payment_requests WHERE status = 'Onaylandı'"
+        )
+        # Bekleyen bakiye
+        pending_deposits = await conn.fetchval(
+            "SELECT COALESCE(SUM(amount), 0.0) FROM payment_requests WHERE status = 'Bekliyor'"
+        )
+        # Toplam kullanıcı bakiyesi (sistemdeki para)
+        total_user_balance = await conn.fetchval(
+            "SELECT COALESCE(SUM(balance), 0.0) FROM users"
+        )
+
+        return {
+            "total_revenue": float(total_revenue),
+            "total_refund": float(total_refund),
+            "monthly_revenue": float(monthly_revenue),
+            "weekly_revenue": float(weekly_revenue),
+            "daily_revenue": float(daily_revenue),
+            "total_deposits": float(total_deposits),
+            "pending_deposits": float(pending_deposits),
+            "total_user_balance": float(total_user_balance),
+            "daily_breakdown": [
+                {
+                    "date": str(r["date"]),
+                    "revenue": float(r["revenue"]),
+                    "order_count": int(r["order_count"])
+                }
+                for r in daily_breakdown
+            ],
+            "platform_revenue": [
+                {
+                    "platform": r["platform"],
+                    "revenue": float(r["revenue"]),
+                    "order_count": int(r["order_count"])
+                }
+                for r in platform_revenue
+            ],
+        }
+
+# ─── AUTO API FUNCTIONS ───────────────────────────────────────────────────────
+
+async def create_external_api_order(order_id: int, provider: str, external_order_id: str):
+    """Harici API'ye gönderilen siparişi kaydet."""
+    if not db_pool: return None
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO external_api_orders (order_id, provider, external_order_id, status)
+               VALUES ($1, $2, $3, 'pending') RETURNING id""",
+            order_id, provider, external_order_id
+        )
+        return row['id'] if row else None
+
+async def update_external_api_order_status(order_id: int, status: str):
+    """Harici sipariş durumunu güncelle."""
+    if not db_pool: return
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """UPDATE external_api_orders
+               SET status = $1, last_checked = NOW()
+               WHERE order_id = $2""",
+            status, order_id
+        )
+
+async def get_pending_external_orders():
+    """Henüz tamamlanmamış harici API siparişlerini döndür."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT ea.*, o.user_id, o.quantity, o.link, s.name as service_name
+            FROM external_api_orders ea
+            JOIN orders o ON ea.order_id = o.id
+            LEFT JOIN services s ON o.service_id = s.id
+            WHERE ea.status NOT IN ('completed', 'cancelled', 'error')
+            ORDER BY ea.created_at DESC
+        """)
+        return [dict(r) for r in rows]
+
+async def get_external_api_log(limit: int = 100):
+    """Tüm harici API sipariş logunu döndür."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT ea.*, o.user_id, u.first_name, u.custom_username,
+                   o.quantity, o.link, o.price, s.name as service_name
+            FROM external_api_orders ea
+            JOIN orders o ON ea.order_id = o.id
+            JOIN users u ON o.user_id = u.telegram_id
+            LEFT JOIN services s ON o.service_id = s.id
+            ORDER BY ea.created_at DESC
+            LIMIT $1
+        """, limit)
+        return [dict(r) for r in rows]
+
+# ─── BALANCE HISTORY FUNCTIONS ───────────────────────────────────────────────
+
+async def add_balance_history(user_id: int, amount: float, type_: str, description: str, balance_after: float):
+    """Bakiye hareketi kaydet."""
+    if not db_pool: return
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO balance_history (user_id, amount, type, description, balance_after)
+                   VALUES ($1, $2, $3, $4, $5)""",
+                user_id, amount, type_, description, balance_after
+            )
+    except Exception:
+        pass
+
+async def get_user_balance_history(user_id: int, limit: int = 50):
+    """Kullanıcının bakiye geçmişini döndür."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM balance_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+            user_id, limit
+        )
+        return [dict(r) for r in rows]
+
+async def get_all_balance_history(limit: int = 200):
+    """Admin: tüm bakiye hareketlerini döndür."""
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT bh.*, u.first_name, u.custom_username
+               FROM balance_history bh
+               LEFT JOIN users u ON bh.user_id = u.telegram_id
+               ORDER BY bh.created_at DESC LIMIT $1""",
+            limit
+        )
+        return [dict(r) for r in rows]

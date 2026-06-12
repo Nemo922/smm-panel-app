@@ -19,6 +19,12 @@
     <link rel="stylesheet" href="style.css?v=5">
     <!-- Chart.js library for feat_analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FEAT: PWA Manifest (feat_pwa ile aktif olur, ama link her zaman ekli) -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SMM Panel">
 </head>
 <body>
 
@@ -208,6 +214,52 @@
             </div>
         </main>
 
+        <!-- VIEW 6: REFERRAL (Referans Sistemi) -->
+        <main class="view-section" id="view-referral">
+            <h2 class="section-title">🎁 Kazan & Paylaş</h2>
+            
+            <div id="feat-referral-dedicated-container" style="background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 18px; box-shadow: var(--glass-shadow);">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <div style="width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.05)); border: 2px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-size: 36px; color: var(--tg-button-color);">
+                        <i class="ph-fill ph-gift"></i>
+                    </div>
+                    <h3 style="font-size: 16px; font-weight: 700; margin: 0 0 6px; color: var(--tg-text-color);">Arkadaşlarını Davet Et, Kazan!</h3>
+                    <p style="font-size: 12px; color: var(--tg-hint-color); max-width: 280px; margin: 0 auto; line-height: 1.4;">
+                        Referans linkinizle kayıt olan üyelerin bakiye yüklemelerinden anında komisyon kazanın.
+                    </p>
+                </div>
+
+                <div class="input-group" style="margin-bottom: 16px;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 8px; font-size: 12px;">Davet Linkiniz</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <input type="text" id="referral-link-input-dedicated" readonly style="flex: 1; background: rgba(0,0,0,0.05); font-size: 12px; padding: 12px; border-radius: 10px; border: 1px solid var(--glass-border); color: var(--tg-text-color);" value="Yükleniyor...">
+                        <button class="tg-button primary" id="btn-copy-ref-link-dedicated" style="padding: 12px; margin: 0; min-width: 46px; display: flex; align-items: center; justify-content: center; border-radius: 10px;"><i class="ph ph-copy" style="font-size: 18px;"></i></button>
+                    </div>
+                </div>
+
+                <div style="background: rgba(99,102,241,0.05); border: 1px solid rgba(99,102,241,0.1); border-radius: 12px; padding: 14px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 12px; color: var(--tg-hint-color);">Komisyon Oranı:</span>
+                        <span style="font-size: 13px; font-weight: 700; color: var(--tg-button-color);" id="ref-bonus-percent-text-dedicated">%5</span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--tg-hint-color); line-height: 1.4;">
+                        * Davet ettiğiniz kişi sisteme her bakiye yüklediğinde, yatırdığı tutarın %5'i kadar bakiye cüzdanınıza otomatik hediye olarak eklenir.
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; text-align: center; border-top: 1px dashed var(--glass-border); padding-top: 16px; margin-top: 8px;">
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px;">
+                        <span style="display: block; font-size: 11px; color: var(--tg-hint-color); font-weight: 600; margin-bottom: 4px;">Toplam Kayıt</span>
+                        <span style="font-size: 18px; font-weight: 800; color: var(--tg-text-color);" id="ref-count-dedicated">0</span>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); padding: 12px; border-radius: 12px;">
+                        <span style="display: block; font-size: 11px; color: var(--tg-hint-color); font-weight: 600; margin-bottom: 4px;">Kazancınız</span>
+                        <span style="font-size: 18px; font-weight: 800; color: var(--color-success);" id="ref-earnings-dedicated">₺0.00</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
         <!-- VIEW 4: PROFILE (Profil) -->
         <main class="view-section" id="view-profile">
             <div class="profile-header-card">
@@ -281,6 +333,13 @@
                     <span>Destek Talebi Oluştur</span>
                     <i class="ph ph-caret-right"></i>
                 </a>
+
+                <!-- FEAT: Bakiye Geçmişi (feat_balance_history) -->
+                <a href="#" class="menu-item" id="menu-balance-history" style="display:none;">
+                    <div class="menu-icon"><i class="ph ph-clock-clockwise"></i></div>
+                    <span>Bakiye Geçmişi</span>
+                    <i class="ph ph-caret-right"></i>
+                </a>
                 
                 <!-- FEAT: SSS (Gizli, feat_faq) -->
                 <a href="#" class="menu-item" id="menu-faq" style="display: none;">
@@ -294,6 +353,19 @@
                     <span>Hizmet Şartları</span>
                     <i class="ph ph-caret-right"></i>
                 </a>
+            </div>
+        </main>
+
+        <!-- FEAT: Bakiye Geçmişi Sayfası (feat_balance_history) -->
+        <main class="view-section" id="view-balance-history">
+            <div class="admin-header">
+                <button class="admin-back-btn" id="btn-balance-history-back">
+                    <i class="ph ph-arrow-left"></i>
+                </button>
+                <h2>Bakiye Geçmişi</h2>
+            </div>
+            <div id="balance-history-container" style="padding:12px 16px;">
+                <p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>
             </div>
         </main>
 
@@ -378,6 +450,21 @@
                         margin-left:2px;
                     "></span>
                 </button>
+                <!-- FEAT: Activity Log Tab (feat_activity_log) -->
+                <button class="admin-tab" data-tab="tab-activity-log" id="admin-tab-activity-log-btn" style="display:none;">
+                    <i class="ph ph-list-magnifying-glass"></i>
+                    <span>Aktivite</span>
+                </button>
+                <!-- FEAT: Revenue Report Tab (feat_revenue) -->
+                <button class="admin-tab" data-tab="tab-revenue" id="admin-tab-revenue-btn" style="display:none;">
+                    <i class="ph ph-currency-circle-dollar"></i>
+                    <span>Gelir</span>
+                </button>
+                <!-- FEAT: Auto API Tab (feat_auto_api) -->
+                <button class="admin-tab" data-tab="tab-auto-api" id="admin-tab-auto-api-btn" style="display:none;">
+                    <i class="ph ph-plugs-connected"></i>
+                    <span>Oto API</span>
+                </button>
             </div>
 
             <!-- TAB 1: Bekleyen Ödemeler -->
@@ -446,6 +533,164 @@
                         ">
                             <i class="ph-fill ph-paper-plane-tilt"></i>
                         </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEAT: TAB - Aktivite Logu (feat_activity_log) -->
+            <div class="admin-tab-content" id="tab-activity-log">
+                <div class="admin-section-header">
+                    <span>Kullanıcı Aktivite Logu</span>
+                    <button class="btn-refresh" id="btn-refresh-activity-log"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <!-- Kullanıcı filtresi -->
+                <div style="padding: 12px 16px 0;">
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="number" id="activity-log-user-filter" placeholder="Telegram ID ile filtrele (boş = tümü)"
+                            style="flex:1; background:var(--tg-secondary-bg-color); border:1px solid var(--glass-border);
+                            border-radius:10px; padding:10px 12px; color:var(--tg-text-color); font-size:13px; outline:none;">
+                        <button id="btn-filter-activity-log" style="
+                            background:var(--tg-button-color); color:var(--tg-button-text-color);
+                            border:none; border-radius:10px; padding:10px 16px; font-size:13px;
+                            font-weight:600; cursor:pointer; white-space:nowrap;">
+                            <i class="ph ph-funnel"></i> Filtrele
+                        </button>
+                    </div>
+                </div>
+                <div id="activity-log-container" style="padding:12px 16px;">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- FEAT: TAB - Gelir Raporu (feat_revenue) -->
+            <div class="admin-tab-content" id="tab-revenue">
+                <div class="admin-section-header">
+                    <span>Gelir Raporu</span>
+                    <button class="btn-refresh" id="btn-refresh-revenue"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+
+                <!-- Özet Kartlar -->
+                <div id="revenue-summary-cards" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:12px 16px 0;">
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-calendar-check" style="color:#6366f1; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Bugün</div>
+                        <div style="font-size:18px; font-weight:800; color:var(--tg-text-color);" id="rev-daily">₺0.00</div>
+                    </div>
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-calendar-blank" style="color:#a855f7; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Bu Hafta</div>
+                        <div style="font-size:18px; font-weight:800; color:var(--tg-text-color);" id="rev-weekly">₺0.00</div>
+                    </div>
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-calendar" style="color:#f59e0b; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Bu Ay</div>
+                        <div style="font-size:18px; font-weight:800; color:var(--tg-text-color);" id="rev-monthly">₺0.00</div>
+                    </div>
+                    <div style="background:linear-gradient(135deg,rgba(34,197,94,0.15),rgba(34,197,94,0.05)); border:1px solid rgba(34,197,94,0.3); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-trend-up" style="color:#22c55e; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Toplam Ciro</div>
+                        <div style="font-size:18px; font-weight:800; color:#22c55e;" id="rev-total">₺0.00</div>
+                    </div>
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-arrow-circle-up" style="color:#3b82f6; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Onaylanan Yükleme</div>
+                        <div style="font-size:18px; font-weight:800; color:var(--tg-text-color);" id="rev-deposits">₺0.00</div>
+                    </div>
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-clock" style="color:#f59e0b; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Bekleyen Yükleme</div>
+                        <div style="font-size:18px; font-weight:800; color:var(--tg-text-color);" id="rev-pending">₺0.00</div>
+                    </div>
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-arrow-u-down-left" style="color:#ef4444; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Toplam İade</div>
+                        <div style="font-size:18px; font-weight:800; color:#ef4444;" id="rev-refund">₺0.00</div>
+                    </div>
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:14px;">
+                        <i class="ph-fill ph-wallet" style="color:#6366f1; font-size:18px;"></i>
+                        <div style="font-size:10px; color:var(--tg-hint-color); font-weight:600; margin-top:4px;">Toplam Bakiye</div>
+                        <div style="font-size:18px; font-weight:800; color:var(--tg-text-color);" id="rev-balance">₺0.00</div>
+                    </div>
+                </div>
+
+                <!-- Son 30 Gün Grafik -->
+                <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; padding:16px; margin:14px 16px 0;">
+                    <h4 style="margin:0 0 12px; font-size:13px; font-weight:700; color:var(--tg-text-color);">Son 30 Günlük Ciro (₺)</h4>
+                    <div style="height:160px; position:relative;">
+                        <canvas id="revenueChartCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Platform Bazlı Dağılım -->
+                <div style="padding:14px 16px 24px;">
+                    <h4 style="font-size:13px; font-weight:700; color:var(--tg-text-color); margin:0 0 10px;">Platform Bazlı Ciro</h4>
+                    <div id="rev-platform-breakdown">
+                        <p style="text-align:center; color:var(--tg-hint-color);">Yükleniyor...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEAT: TAB - Otomatik API Entegrasyonu (feat_auto_api) -->
+            <div class="admin-tab-content" id="tab-auto-api">
+                <div class="admin-section-header">
+                    <span>Otomatik API Entegrasyonu</span>
+                    <button class="btn-refresh" id="btn-refresh-auto-api"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <div style="padding:12px 16px;">
+
+                    <!-- Bağlantı Testi -->
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:16px; margin-bottom:14px;">
+                        <h4 style="margin:0 0 10px; font-size:13px; font-weight:700; color:var(--tg-text-color); display:flex; align-items:center; gap:8px;">
+                            <i class="ph-fill ph-plugs-connected" style="color:#22c55e;"></i> API Bağlantısı
+                        </h4>
+                        <p style="font-size:12px; color:var(--tg-hint-color); margin:0 0 12px; line-height:1.5;">
+                            API URL ve Key bilgilerini <strong>Ayarlar</strong> sekmesinden (<code>auto_api_url</code>, <code>auto_api_key</code>) ayarlayın. Servis eşlemesi için <code>auto_api_service_map</code> anahtarını JSON formatında doldurun.
+                        </p>
+                        <div style="background:var(--tg-secondary-bg-color); border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:12px; color:var(--tg-hint-color);">
+                            <strong>Örnek servis eşlemesi:</strong><br>
+                            <code>{"1": "123", "2": "456"}</code><br>
+                            <span style="font-size:11px;">Sol: Panel servis ID → Sağ: Provider servis ID</span>
+                        </div>
+                        <button id="btn-test-auto-api" style="
+                            background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff;
+                            border:none; border-radius:10px; padding:10px 18px; font-size:13px;
+                            font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px;
+                        ">
+                            <i class="ph ph-wifi-high"></i> Bağlantıyı Test Et
+                        </button>
+                        <div id="auto-api-test-result" style="margin-top:10px; font-size:12px; display:none;"></div>
+                    </div>
+
+                    <!-- Manuel Sipariş Gönderme -->
+                    <div style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:16px; margin-bottom:14px;">
+                        <h4 style="margin:0 0 10px; font-size:13px; font-weight:700; color:var(--tg-text-color); display:flex; align-items:center; gap:8px;">
+                            <i class="ph-fill ph-paper-plane-tilt" style="color:#6366f1;"></i> Sipariş Gönder
+                        </h4>
+                        <p style="font-size:12px; color:var(--tg-hint-color); margin:0 0 10px;">Bekleyen bir siparişi harici API'ye manuel olarak ilet.</p>
+                        <div style="display:flex; gap:8px;">
+                            <input type="number" id="auto-api-order-id" placeholder="Sipariş ID"
+                                style="flex:1; background:var(--tg-secondary-bg-color); border:1px solid var(--glass-border);
+                                border-radius:10px; padding:10px 12px; color:var(--tg-text-color); font-size:13px; outline:none;">
+                            <button id="btn-submit-auto-api-order" style="
+                                background:var(--tg-button-color); color:var(--tg-button-text-color);
+                                border:none; border-radius:10px; padding:10px 16px; font-size:13px;
+                                font-weight:600; cursor:pointer; white-space:nowrap;">
+                                <i class="ph ph-paper-plane-tilt"></i> Gönder
+                            </button>
+                            <button id="btn-check-auto-api-status" style="
+                                background:rgba(99,102,241,0.15); color:var(--tg-button-color);
+                                border:1px solid rgba(99,102,241,0.3); border-radius:10px; padding:10px 14px;
+                                font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;">
+                                <i class="ph ph-magnifying-glass"></i> Durum
+                            </button>
+                        </div>
+                        <div id="auto-api-order-result" style="margin-top:10px; font-size:12px; display:none;"></div>
+                    </div>
+
+                    <!-- API Log -->
+                    <h4 style="font-size:13px; font-weight:700; color:var(--tg-text-color); margin:0 0 10px;">API Sipariş Logu</h4>
+                    <div id="auto-api-log-container">
+                        <p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>
                     </div>
                 </div>
             </div>
@@ -743,6 +988,10 @@
                 <i class="ph ph-receipt"></i>
                 <span>Siparişler</span>
             </a>
+            <a href="#" class="nav-item" data-target="view-referral" id="nav-referral" style="display: none;">
+                <i class="ph ph-gift"></i>
+                <span>Kazan</span>
+            </a>
             <a href="#" class="nav-item" data-target="view-funds">
                 <i class="ph ph-wallet"></i>
                 <span>Bakiye</span>
@@ -793,6 +1042,12 @@
                                 <span style="color: #22c55e; display: none;" id="coupon-discount-row">Kupon İndirimi: <span id="modal-coupon-discount">-%0</span></span>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- FEAT: Sipariş Notu (feat_order_note) -->
+                    <div class="input-group" id="feat-order-note-group" style="display:none; margin-top:12px;">
+                        <label for="order-user-note">Sipariş Notu <span style="color:var(--tg-hint-color); font-weight:400;">(opsiyonel)</span></label>
+                        <input type="text" id="order-user-note" placeholder="Örn: Lütfen yavaş gönder" maxlength="200">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -918,6 +1173,57 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>Siparişi İptal Et</h3>
+
+        <!-- FEAT: Toplu Sipariş Modalı (feat_bulk_order) -->
+        <div class="modal-overlay" id="bulk-order-modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📦 Toplu Sipariş</h3>
+                    <button class="close-modal" id="bulk-order-close"><i class="ph ph-x"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p id="bulk-order-service-name" style="font-weight:700; color:var(--tg-text-color); margin-bottom:4px;"></p>
+                    <p style="font-size:12px; color:var(--tg-hint-color); margin-bottom:16px;">Her satıra bir link yazın. Aynı miktar tüm linklere uygulanır.</p>
+
+                    <div class="input-group">
+                        <label>Miktar (Her link için)</label>
+                        <input type="number" id="bulk-order-quantity" placeholder="Örn: 1000">
+                        <div class="min-max">Min: <span id="bulk-order-min">100</span> - Max: <span id="bulk-order-max">10000</span></div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Linkler (Her satıra bir tane, max 20)</label>
+                        <textarea id="bulk-order-links" rows="6"
+                            placeholder="https://instagram.com/p/abc123&#10;https://instagram.com/p/def456&#10;https://instagram.com/p/ghi789"
+                            style="width:100%; background:var(--tg-secondary-bg-color); border:1px solid var(--glass-border);
+                            border-radius:10px; padding:10px 12px; color:var(--tg-text-color); font-size:13px;
+                            resize:none; font-family:inherit; outline:none; line-height:1.5;"></textarea>
+                        <div style="font-size:11px; color:var(--tg-hint-color); margin-top:4px;">
+                            <span id="bulk-link-count">0</span> link girildi
+                        </div>
+                    </div>
+
+                    <div id="bulk-price-preview" style="
+                        background:var(--tg-secondary-bg-color); border-radius:10px;
+                        padding:12px; margin-top:8px; display:none;
+                    ">
+                        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
+                            <span style="color:var(--tg-hint-color);">Link başına:</span>
+                            <span id="bulk-unit-price" style="font-weight:600;">₺0.00</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:14px;">
+                            <span style="color:var(--tg-hint-color); font-weight:600;">Toplam:</span>
+                            <span id="bulk-total-price" style="font-weight:800; color:var(--tg-button-color);">₺0.00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="tg-button primary full-width" id="btn-submit-bulk-order" style="margin:0;">
+                        Toplu Sipariş Ver
+                    </button>
+                </div>
+            </div>
+        </div>
                     <button class="close-modal"><i class="ph ph-x"></i></button>
                 </div>
                 <div class="modal-body">

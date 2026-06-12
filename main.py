@@ -64,6 +64,7 @@ class NewOrder(BaseModel):
     quantity: int
     price: float
     coupon_code: Optional[str] = None
+    user_note: Optional[str] = None
 
 class NewPaymentRequest(BaseModel):
     telegram_id: int
@@ -247,6 +248,7 @@ async def register_user(data: RegisterUser):
         await database.create_user(data.telegram_id, data.first_name, data.username, data.custom_username, ref_by)
     else:
         await database.update_custom_username(data.telegram_id, data.custom_username)
+    await database.log_activity(data.telegram_id, "kayıt", f"Kullanıcı adı: {data.custom_username}")
     return {"success": True, "message": "Kayıt başarılı"}
 
 @app.get("/api/services")
@@ -279,6 +281,25 @@ async def get_notifications(tg_id: int):
         if n.get('created_at'):
             n['created_at'] = str(n['created_at'])
     return {"success": True, "notifications": notifications}
+
+@app.get("/api/user/balance-history")
+async def get_balance_history(tg_id: int):
+    """Kullanıcının bakiye hareket geçmişi."""
+    history = await database.get_user_balance_history(tg_id, limit=50)
+    for h in history:
+        if h.get('created_at'):
+            h['created_at'] = str(h['created_at'])
+    return {"success": True, "history": history}
+
+@app.get("/api/admin/balance-history")
+async def admin_get_balance_history(tg_id: int):
+    """Admin: tüm kullanıcıların bakiye hareketleri."""
+    verify_admin(tg_id)
+    history = await database.get_all_balance_history(limit=300)
+    for h in history:
+        if h.get('created_at'):
+            h['created_at'] = str(h['created_at'])
+    return {"success": True, "history": history}
 
 @app.post("/api/user/notifications/read")
 async def read_notifications(data: ReadNotificationsModel):
@@ -342,7 +363,14 @@ async def place_order(data: NewOrder):
 
     # Bakiyeyi güncelle ve siparişi oluştur
     await database.update_balance(data.telegram_id, -final_price)
-    order_id = await database.create_order(data.telegram_id, data.service_id, data.link, data.quantity, final_price)
+    order_id = await database.create_order(data.telegram_id, data.service_id, data.link, data.quantity, final_price, data.user_note)
+
+    # Bakiye geçmişi logu
+    new_bal = user['balance'] - final_price
+    await database.add_balance_history(
+        data.telegram_id, -final_price, "sipariş",
+        f"#{order_id} {service['name'][:40]}", round(new_bal, 2)
+    )
 
     # Referans geliri
     if settings.get("feat_referral") == "true" and user.get("referred_by"):
@@ -353,6 +381,12 @@ async def place_order(data: NewOrder):
 
     new_balance = user['balance'] - final_price
     service_name = service['name'] if service else f"Servis #{data.service_id}"
+
+    # Aktivite logu
+    await database.log_activity(
+        data.telegram_id, "sipariş_verildi",
+        f"Sipariş #{order_id} | {service_name} | {data.quantity:,} adet | ₺{final_price:.2f}"
+    )
 
     # Kullanıcıya bildirim
     user_msg = (
@@ -383,7 +417,18 @@ async def place_order(data: NewOrder):
 
 @app.post("/api/payment-request")
 async def new_payment_request(data: NewPaymentRequest):
+    settings = await database.get_settings()
+    min_deposit = float(settings.get("min_deposit_amount", "0") or "0")
+    if min_deposit > 0 and data.amount < min_deposit:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum yükleme tutarı ₺{min_deposit:.2f} olmalıdır."
+        )
     await database.create_payment_request(data.telegram_id, data.amount, data.payment_method, data.details)
+    await database.log_activity(
+        data.telegram_id, "ödeme_bildirimi",
+        f"₺{data.amount:.2f} | {data.payment_method}"
+    )
     # Admin'e bildirim
     admin_ids = get_admin_ids()
     user = await database.get_user(data.telegram_id)
@@ -427,9 +472,39 @@ async def admin_approve_payment(data: AdminAction):
                 "Ödemeniz Onaylandı", 
                 f"₺{req['amount']:.2f} tutarındaki ödemeniz onaylandı ve hesabınıza yüklendi.{note_str}"
             )
+            await database.log_activity(
+                req['user_id'], "bakiye_yüklendi",
+                f"₺{req['amount']:.2f} ödeme onaylandı (Admin: {data.admin_id})"
+            )
+            # Bakiye geçmişi
+            refreshed = await database.get_user(req['user_id'])
+            await database.add_balance_history(
+                req['user_id'], req['amount'], "yükleme",
+                f"{req.get('payment_method','Ödeme')} onaylandı",
+                refreshed['balance'] if refreshed else req['amount']
+            )
             # Send generic message to Telegram
             tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
             await send_telegram_message(req['user_id'], tg_msg)
+            
+            # REFERRAL KOMISYON SISTEMI (%5)
+            settings = await database.get_settings()
+            if settings.get("feat_referral") == "true":
+                user = await database.get_user(req['user_id'])
+                if user and user.get('referred_by'):
+                    commission = round(req['amount'] * 0.05, 2)
+                    if commission > 0:
+                        await database.add_referral_commission(user['referred_by'], commission)
+                        await database.create_notification(
+                            user['referred_by'],
+                            "Referans Kazancı",
+                            f"Davet ettiğiniz kullanıcı bakiye yükledi. Yüklemeden ₺{commission:.2f} komisyon kazandınız!"
+                        )
+                        await send_telegram_message(
+                            user['referred_by'], 
+                            f"🎁 <b>Tebrikler!</b>\n\nDavet ettiğiniz bir kullanıcı bakiye yükledi ve siz de <b>₺{commission:.2f}</b> komisyon kazandınız!"
+                        )
+
         return {"success": True, "message": "Ödeme onaylandı ve bakiye eklendi."}
     return {"success": False, "message": "İşlem başarısız veya zaten onaylanmış."}
 
@@ -544,9 +619,22 @@ async def admin_add_balance(data: AdminAddBalance):
     
     await database.update_balance(data.telegram_id, data.amount)
     
+    # Aktivite logu
+    await database.log_activity(
+        data.telegram_id, "admin_bakiye_ekledi",
+        f"₺{data.amount:.2f} eklendi. Not: {data.note} (Admin: {data.admin_id})"
+    )
+    
     # Kullanıcıya bildirim gönder
     user = await database.get_user(data.telegram_id)
     new_balance = user['balance'] if user else 0.0
+    
+    # Bakiye geçmişi
+    await database.add_balance_history(
+        data.telegram_id, data.amount, "admin_ekleme",
+        data.note or f"Admin #{data.admin_id} tarafından eklendi",
+        new_balance
+    )
     
     # Save details in database notifications
     note_str = f" Not: {data.note}" if data.note else ""
@@ -587,6 +675,10 @@ async def admin_cancel_order(data: AdminOrderAction):
             f"Sipariş İptal Edildi #{data.order_id}", 
             f"Sipariş #{data.order_id} iptal edildi ve ₺{result['refund']:.2f} bakiyenize iade edildi.{note_str}"
         )
+        await database.log_activity(
+            result['user_id'], "sipariş_iptal",
+            f"Sipariş #{data.order_id} iptal | ₺{result['refund']:.2f} iade (Admin: {data.admin_id})"
+        )
         # Send generic message to Telegram
         tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
         await send_telegram_message(result['user_id'], tg_msg)
@@ -596,7 +688,18 @@ async def admin_cancel_order(data: AdminOrderAction):
 @app.post("/api/admin/order/update-status")
 async def admin_update_order_status(data: AdminOrderStatus):
     verify_admin(data.admin_id)
-    await database.update_order_status(data.order_id, data.status)
+    user_id = await database.update_order_status(data.order_id, data.status)
+    if user_id:
+        await database.create_notification(
+            user_id,
+            "Sipariş Durumu Güncellendi",
+            f"#{data.order_id} numaralı siparişinizin durumu '{data.status}' olarak güncellendi."
+        )
+        if data.status in ["Tamamlandı", "İşlemde"]:
+            icon = "✅" if data.status == "Tamamlandı" else "🔄"
+            tg_msg = f"{icon} <b>Siparişiniz {data.status}</b>\n\n#{data.order_id} numaralı siparişinizin durumu güncellendi. Detaylar için uygulamayı ziyaret edebilirsiniz."
+            await send_telegram_message(user_id, tg_msg)
+            
     return {"success": True, "message": f"Sipariş durumu '{data.status}' olarak güncellendi."}
 
 @app.post("/api/admin/order/update-visibility")
@@ -608,6 +711,16 @@ async def admin_update_order_visibility(data: AdminOrderVisibility):
 # ═══════════════════════════════════════════════════════════════
 # ADMİN – AYARLAR
 # ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/analytics/advanced")
+async def admin_get_advanced_analytics(tg_id: int):
+    verify_admin(tg_id)
+    data = await database.get_advanced_analytics()
+    # Serialize datetimes in daily_revenue
+    for row in data.get('daily_revenue', []):
+        if 'date' in row and hasattr(row['date'], 'isoformat'):
+            row['date'] = row['date'].isoformat()
+    return {"success": True, "data": data}
 
 @app.get("/api/admin/settings")
 async def admin_get_settings(tg_id: int):
@@ -741,6 +854,474 @@ async def admin_bulk_notify(data: AdminBulkNotify, background_tasks: BackgroundT
     background_tasks.add_task(send_bulk_telegram_job, user_ids, tg_text)
     
     return {"success": True, "message": f"Toplu bildirim sıraya alındı. {len(user_ids)} üyeye iletiliyor."}
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: ACTIVITY LOG ENDPOİNTLERİ
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/activity-log")
+async def admin_get_activity_log(tg_id: int, user_id: int = None, limit: int = 100):
+    """Admin: genel veya kullanıcıya ait aktivite logunu döndür."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_activity_log") != "true":
+        raise HTTPException(status_code=400, detail="Aktivite logu özelliği aktif değil")
+    logs = await database.get_activity_log(user_id=user_id, limit=min(limit, 500))
+    for entry in logs:
+        if entry.get("created_at"):
+            entry["created_at"] = str(entry["created_at"])
+    return {"success": True, "logs": logs}
+
+@app.get("/api/admin/revenue-report")
+async def admin_get_revenue_report(tg_id: int):
+    """Admin: kapsamlı gelir raporu döndür."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_revenue") != "true":
+        raise HTTPException(status_code=400, detail="Gelir raporu özelliği aktif değil")
+    report = await database.get_revenue_report()
+    return {"success": True, "report": report}
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: OTOMATİK API ENTEGRASYONu (feat_auto_api)
+# ═══════════════════════════════════════════════════════════════
+
+async def _send_to_external_api(api_url: str, api_key: str, action: str, params: dict) -> dict:
+    """Harici SMM panel API'sine istek at."""
+    try:
+        payload = {"key": api_key, "action": action, **params}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(api_url, data=payload)
+            return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/admin/auto-api/test")
+async def auto_api_test(tg_id: int):
+    """Harici API bağlantısını test et."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_auto_api") != "true":
+        raise HTTPException(status_code=400, detail="Otomatik API özelliği aktif değil")
+    api_url = settings.get("auto_api_url", "").strip()
+    api_key = settings.get("auto_api_key", "").strip()
+    if not api_url or not api_key:
+        raise HTTPException(status_code=400, detail="API URL veya Key ayarlanmamış")
+    result = await _send_to_external_api(api_url, api_key, "balance", {})
+    return {"success": True, "result": result}
+
+@app.post("/api/admin/auto-api/submit-order")
+async def auto_api_submit_order(tg_id: int, order_id: int):
+    """Mevcut bir siparişi harici API'ye manuel olarak gönder."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_auto_api") != "true":
+        raise HTTPException(status_code=400, detail="Otomatik API özelliği aktif değil")
+
+    api_url = settings.get("auto_api_url", "").strip()
+    api_key = settings.get("auto_api_key", "").strip()
+    if not api_url or not api_key:
+        raise HTTPException(status_code=400, detail="API URL veya Key ayarlanmamış")
+
+    # Sipariş bilgilerini al
+    orders = await database.get_all_orders(show_hidden=True)
+    order = next((o for o in orders if o['id'] == order_id), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Sipariş bulunamadı")
+
+    # Servis eşlemesini kontrol et
+    import json
+    service_map = {}
+    try:
+        service_map = json.loads(settings.get("auto_api_service_map", "{}"))
+    except Exception:
+        pass
+
+    provider_service_id = service_map.get(str(order['service_id']))
+    if not provider_service_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Servis #{order['service_id']} için provider eşlemesi bulunamadı. "
+                   "Admin ayarlardan 'auto_api_service_map' JSON'una ekleyin."
+        )
+
+    result = await _send_to_external_api(api_url, api_key, "add", {
+        "service": provider_service_id,
+        "link": order['link'],
+        "quantity": order['quantity'],
+    })
+
+    if result.get("error"):
+        return {"success": False, "message": f"API hatası: {result['error']}"}
+
+    external_id = str(result.get("order", ""))
+    if external_id:
+        await database.create_external_api_order(order_id, api_url, external_id)
+        await database.update_order_status(order_id, "İşlemde")
+        return {"success": True, "external_order_id": external_id, "message": "Sipariş harici API'ye gönderildi."}
+
+    return {"success": False, "message": "API yanıtı beklenmedik formatta.", "raw": result}
+
+@app.get("/api/admin/auto-api/log")
+async def auto_api_get_log(tg_id: int):
+    """Harici API sipariş logunu getir."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_auto_api") != "true":
+        raise HTTPException(status_code=400, detail="Otomatik API özelliği aktif değil")
+    logs = await database.get_external_api_log(limit=200)
+    for entry in logs:
+        for k, v in entry.items():
+            if hasattr(v, 'isoformat'):
+                entry[k] = v.isoformat()
+    return {"success": True, "logs": logs}
+
+@app.post("/api/admin/auto-api/check-status")
+async def auto_api_check_status(tg_id: int, order_id: int):
+    """Harici API'den sipariş durumunu sorgula ve güncelle."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_auto_api") != "true":
+        raise HTTPException(status_code=400, detail="Otomatik API özelliği aktif değil")
+
+    api_url = settings.get("auto_api_url", "").strip()
+    api_key = settings.get("auto_api_key", "").strip()
+
+    pending = await database.get_pending_external_orders()
+    ext_order = next((p for p in pending if p['order_id'] == order_id), None)
+    if not ext_order:
+        raise HTTPException(status_code=404, detail="Bu sipariş için harici API kaydı bulunamadı")
+
+    result = await _send_to_external_api(api_url, api_key, "status", {
+        "order": ext_order['external_order_id']
+    })
+
+    if result.get("error"):
+        return {"success": False, "message": f"API hatası: {result['error']}"}
+
+    api_status = result.get("status", "").lower()
+    # Yaygın SMM panel durum eşlemesi
+    status_map = {
+        "completed": "Tamamlandı",
+        "in progress": "İşlemde",
+        "processing": "İşlemde",
+        "pending": "Bekliyor",
+        "partial": "Tamamlandı",
+        "cancelled": "İptal Edildi",
+        "canceled": "İptal Edildi",
+        "refunded": "İptal Edildi",
+    }
+    local_status = status_map.get(api_status, "İşlemde")
+    await database.update_external_api_order_status(order_id, api_status)
+    await database.update_order_status(order_id, local_status)
+
+    return {"success": True, "api_status": api_status, "local_status": local_status}
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: TOPLU SİPARİŞ (feat_bulk_order)
+# ═══════════════════════════════════════════════════════════════
+
+class BulkOrderItem(BaseModel):
+    telegram_id: int
+    service_id: int
+    links: list[str]          # birden fazla link
+    quantity: int
+    coupon_code: Optional[str] = None
+
+@app.post("/api/bulk-order")
+async def place_bulk_order(data: BulkOrderItem):
+    """Aynı servisi birden fazla linke toplu sipariş ver."""
+    settings = await database.get_settings()
+    if settings.get("feat_bulk_order") != "true":
+        raise HTTPException(status_code=400, detail="Toplu sipariş özelliği aktif değil")
+
+    if not data.links:
+        raise HTTPException(status_code=400, detail="En az bir link giriniz")
+    if len(data.links) > 20:
+        raise HTTPException(status_code=400, detail="Tek seferde en fazla 20 link girilebilir")
+
+    # Linleri temizle
+    links = [l.strip() for l in data.links if l.strip()]
+    if not links:
+        raise HTTPException(status_code=400, detail="Geçerli link bulunamadı")
+
+    user = await database.get_user(data.telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+
+    if user.get("is_blocked") and settings.get("feat_block_user") == "true":
+        raise HTTPException(status_code=403, detail="Hesabınız engellenmiştir.")
+
+    services = await database.get_all_services()
+    service = next((s for s in services if s['id'] == data.service_id), None)
+    if not service:
+        raise HTTPException(status_code=404, detail="Hizmet bulunamadı")
+
+    # Her link için birim fiyat hesapla
+    unit_price = (service['price_per_1000'] / 1000.0) * data.quantity
+
+    # VIP indirimi
+    if settings.get("feat_vip") == "true" and user.get("vip_level", 0) > 0:
+        vip_discount = min(user["vip_level"] * 5.0, 25.0)
+        unit_price = unit_price * (1.0 - vip_discount / 100.0)
+
+    # Kupon indirimi
+    coupon_id_to_use = None
+    if data.coupon_code and settings.get("feat_coupons") == "true":
+        coupon = await database.get_coupon(data.coupon_code)
+        if not coupon:
+            raise HTTPException(status_code=400, detail="Geçersiz kupon kodu")
+        used_already = await database.db_pool.fetchval(
+            "SELECT 1 FROM coupon_uses WHERE coupon_id = $1 AND user_id = $2",
+            coupon['id'], data.telegram_id
+        )
+        if used_already:
+            raise HTTPException(status_code=400, detail="Bu kuponu daha önce kullandınız")
+        if coupon['current_uses'] >= coupon['max_uses']:
+            raise HTTPException(status_code=400, detail="Kupon kullanım sınırı dolmuştur")
+        unit_price = unit_price * (1.0 - coupon['discount_percent'] / 100.0)
+        coupon_id_to_use = coupon['id']
+
+    unit_price = round(unit_price, 2)
+    total_price = round(unit_price * len(links), 2)
+
+    if user["balance"] < total_price:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bakiye yetersiz. Gerekli: ₺{total_price:.2f}, Mevcut: ₺{user['balance']:.2f}"
+        )
+
+    # Kuponu işaretle (toplu siparişte 1 kez kullanılır)
+    if coupon_id_to_use:
+        success = await database.use_coupon(coupon_id_to_use, data.telegram_id)
+        if not success:
+            raise HTTPException(status_code=400, detail="Kupon kullanımı başarısız")
+
+    # Toplam bakiyeyi düş, siparişleri oluştur
+    await database.update_balance(data.telegram_id, -total_price)
+    order_ids = []
+    for link in links:
+        oid = await database.create_order(data.telegram_id, data.service_id, link, data.quantity, unit_price)
+        order_ids.append(oid)
+
+    # Activity log
+    await database.log_activity(
+        data.telegram_id, "toplu_sipariş",
+        f"{len(links)} link | {service['name']} | ₺{total_price:.2f}"
+    )
+
+    # Kullanıcıya Telegram bildirimi
+    user_msg = (
+        f"📦 <b>Toplu Siparişiniz Alındı!</b>\n\n"
+        f"🛒 Hizmet: {service['name']}\n"
+        f"🔢 Miktar/Link: {data.quantity:,}\n"
+        f"🔗 Link Sayısı: {len(links)}\n"
+        f"💰 Toplam: ₺{total_price:.2f}\n"
+        f"🆔 Sipariş No'ları: {', '.join(f'#{o}' for o in order_ids)}"
+    )
+    await send_telegram_message(data.telegram_id, user_msg)
+
+    return {
+        "success": True,
+        "message": f"{len(links)} sipariş oluşturuldu.",
+        "order_ids": order_ids,
+        "total_price": total_price
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: GELİR RAPORU ENDPOİNTLERİ
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/revenue")
+async def admin_get_revenue(tg_id: int, period: str = "monthly"):
+    """
+    Admin: gelir raporunu döndür.
+    period: 'daily' (son 30 gün), 'monthly' (son 12 ay), 'yearly'
+    """
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_revenue") != "true":
+        raise HTTPException(status_code=400, detail="Gelir raporu özelliği aktif değil")
+    report = await database.get_revenue_report(period=period)
+    for row in report.get("rows", []):
+        for k, v in row.items():
+            if hasattr(v, "isoformat"):
+                row[k] = v.isoformat()
+    return {"success": True, "report": report}
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: TOPLU SİPARİŞ ENDPOİNTLERİ
+# ═══════════════════════════════════════════════════════════════
+
+class BulkOrderItem(BaseModel):
+    link: str
+    quantity: int
+
+class NewBulkOrder(BaseModel):
+    telegram_id: int
+    service_id: int
+    items: list[BulkOrderItem]
+    coupon_code: Optional[str] = None
+
+@app.post("/api/bulk-order")
+async def place_bulk_order(data: NewBulkOrder):
+    """Tek servis seçimi ile birden fazla link/miktar için toplu sipariş."""
+    settings = await database.get_settings()
+    if settings.get("feat_bulk_order") != "true":
+        raise HTTPException(status_code=400, detail="Toplu sipariş özelliği aktif değil")
+
+    if not data.items:
+        raise HTTPException(status_code=400, detail="En az bir sipariş kalemi gereklidir")
+    if len(data.items) > 50:
+        raise HTTPException(status_code=400, detail="Tek seferde en fazla 50 sipariş verilebilir")
+
+    user = await database.get_user(data.telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    if user.get("is_blocked") and settings.get("feat_block_user") == "true":
+        raise HTTPException(status_code=403, detail="Hesabınız engellenmiştir.")
+
+    services = await database.get_all_services()
+    service = next((s for s in services if s['id'] == data.service_id), None)
+    if not service:
+        raise HTTPException(status_code=404, detail="Hizmet bulunamadı")
+
+    # Kupon doğrulama
+    coupon_obj = None
+    if data.coupon_code and settings.get("feat_coupons") == "true":
+        coupon_obj = await database.get_coupon(data.coupon_code)
+        if not coupon_obj:
+            raise HTTPException(status_code=400, detail="Geçersiz kupon kodu")
+        used = await database.db_pool.fetchval(
+            "SELECT 1 FROM coupon_uses WHERE coupon_id=$1 AND user_id=$2",
+            coupon_obj['id'], data.telegram_id
+        )
+        if used:
+            raise HTTPException(status_code=400, detail="Bu kuponu daha önce kullandınız")
+
+    # Toplam tutarı hesapla
+    total_price = 0.0
+    for item in data.items:
+        base = (service['price_per_1000'] / 1000.0) * item.quantity
+        if settings.get("feat_vip") == "true" and user.get("vip_level", 0) > 0:
+            discount = min(user["vip_level"] * 5.0, 25.0)
+            base = base * (1.0 - discount / 100.0)
+        if coupon_obj:
+            base = base * (1.0 - coupon_obj['discount_percent'] / 100.0)
+        total_price += base
+
+    total_price = round(total_price, 2)
+    if user["balance"] < total_price:
+        raise HTTPException(status_code=400, detail=f"Bakiye yetersiz. Toplam tutar: ₺{total_price:.2f}")
+
+    # Kuponu kullan
+    if coupon_obj:
+        ok = await database.use_coupon(coupon_obj['id'], data.telegram_id)
+        if not ok:
+            raise HTTPException(status_code=400, detail="Kupon kullanımı başarısız")
+
+    # Bakiyeyi düş ve her kalemi ayrı sipariş olarak kaydet
+    await database.update_balance(data.telegram_id, -total_price)
+    order_ids = []
+    for item in data.items:
+        item_price = (service['price_per_1000'] / 1000.0) * item.quantity
+        if settings.get("feat_vip") == "true" and user.get("vip_level", 0) > 0:
+            item_price = item_price * (1.0 - min(user["vip_level"] * 5.0, 25.0) / 100.0)
+        if coupon_obj:
+            item_price = item_price * (1.0 - coupon_obj['discount_percent'] / 100.0)
+        item_price = round(item_price, 2)
+        oid = await database.create_order(data.telegram_id, data.service_id, item.link, item.quantity, item_price)
+        order_ids.append(oid)
+
+    await database.log_activity(
+        data.telegram_id, "toplu_sipariş",
+        f"{len(data.items)} kalem | {service['name']} | Toplam ₺{total_price:.2f}"
+    )
+
+    # Kullanıcıya bildirim
+    await send_telegram_message(
+        data.telegram_id,
+        f"✅ <b>Toplu Siparişiniz Alındı!</b>\n\n"
+        f"📦 Hizmet: {service['name']}\n"
+        f"🔢 Kalem Sayısı: {len(data.items)}\n"
+        f"💰 Toplam Tutar: ₺{total_price:.2f}\n"
+        f"🆔 Sipariş Numaraları: {', '.join(f'#{oid}' for oid in order_ids)}"
+    )
+
+    # Admin'e bildirim
+    for admin_id in get_admin_ids():
+        await send_telegram_message(
+            admin_id,
+            f"📦 <b>TOPLU SİPARİŞ</b>\n\n"
+            f"👤 {user.get('first_name','?')} (@{user.get('custom_username','?')})\n"
+            f"📋 {service['name']} — {len(data.items)} kalem\n"
+            f"💰 Toplam: ₺{total_price:.2f}"
+        )
+
+    return {
+        "success": True,
+        "message": f"{len(data.items)} sipariş başarıyla oluşturuldu.",
+        "order_ids": order_ids,
+        "total_price": total_price
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# FEAT: OTOMATİK API ENTEGRASYONU (feat_auto_api)
+# ═══════════════════════════════════════════════════════════════
+
+class AdminTestAutoApi(BaseModel):
+    admin_id: int
+
+@app.get("/api/admin/auto-api/status")
+async def auto_api_status(tg_id: int):
+    """Admin: harici SMM API bağlantı durumunu döndür."""
+    verify_admin(tg_id)
+    settings = await database.get_settings()
+    if settings.get("feat_auto_api") != "true":
+        raise HTTPException(status_code=400, detail="Otomatik API özelliği aktif değil")
+    
+    api_url = settings.get("auto_api_url", "")
+    api_key = settings.get("auto_api_key", "")
+    
+    if not api_url or not api_key:
+        return {"success": True, "connected": False, "message": "API URL veya API Key ayarlanmamış"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(api_url, data={"key": api_key, "action": "balance"})
+            result = resp.json()
+            balance = result.get("balance", "N/A")
+            currency = result.get("currency", "USD")
+            return {"success": True, "connected": True, "balance": balance, "currency": currency}
+    except Exception as e:
+        return {"success": True, "connected": False, "message": f"Bağlantı hatası: {str(e)[:100]}"}
+
+@app.post("/api/admin/auto-api/test")
+async def auto_api_test(data: AdminTestAutoApi):
+    """Admin: harici API bağlantısını test et."""
+    verify_admin(data.admin_id)
+    settings = await database.get_settings()
+    if settings.get("feat_auto_api") != "true":
+        raise HTTPException(status_code=400, detail="Otomatik API özelliği aktif değil")
+    
+    api_url = settings.get("auto_api_url", "")
+    api_key = settings.get("auto_api_key", "")
+    
+    if not api_url or not api_key:
+        raise HTTPException(status_code=400, detail="Önce Ayarlar'dan API URL ve API Key girin")
+    
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(api_url, data={"key": api_key, "action": "balance"})
+            result = resp.json()
+            if "balance" in result:
+                return {"success": True, "message": f"✅ Bağlantı başarılı! Bakiye: {result['balance']} {result.get('currency','USD')}"}
+            elif "error" in result:
+                return {"success": False, "message": f"API Hatası: {result['error']}"}
+            else:
+                return {"success": True, "message": "Bağlantı kuruldu fakat yanıt beklenenden farklı.", "raw": str(result)[:200]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Bağlantı kurulamadı: {str(e)[:150]}")
 
 # ═══════════════════════════════════════════════════════════════
 # DESTEK CHAT SİSTEMİ (ENGELLİ KULLANICILER)
@@ -944,6 +1525,14 @@ async def serve_css():
 @app.get("/app.js")
 async def serve_js():
     return FileResponse("app.js", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
+@app.get("/manifest.json")
+async def serve_manifest():
+    return FileResponse("manifest.json", headers={"Cache-Control": "public, max-age=86400"})
+
+@app.get("/sw.js")
+async def serve_sw():
+    return FileResponse("sw.js", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 if __name__ == "__main__":
     import uvicorn

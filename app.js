@@ -85,6 +85,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    // Copy Referral Link Event Listener (Dedicated Tab)
+    const btnCopyRefDedicated = document.getElementById('btn-copy-ref-link-dedicated');
+    if (btnCopyRefDedicated) {
+        btnCopyRefDedicated.addEventListener('click', () => {
+            const input = document.getElementById('referral-link-input-dedicated');
+            if (!input) return;
+            input.select();
+            input.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(input.value);
+            showToast("📋 Referans linki kopyalandı!");
+        });
+    }
+
     // Adım 1: Ayarları yükle
     setSplashProgress(30, 'Ayarlar yükleniyor...');
     await loadPublicSettings();
@@ -144,6 +157,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (tabId === 'tab-orders') loadAdminOrders();
                     if (tabId === 'tab-payment-methods') loadAdminPaymentMethods();
                     if (tabId === 'tab-settings') loadAdminSettings();
+                    if (tabId === 'tab-activity-log') loadActivityLog();
+                    if (tabId === 'tab-revenue') loadRevenueReport();
+                    if (tabId === 'tab-auto-api') loadAutoApiLog();
                 }
             } else {
                 // Normal sayfadaysa kullanıcı verisini güncelle
@@ -155,6 +171,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     tg.ready();
+
+    // FEAT: PWA — Service Worker kaydı (feat_pwa aktifse)
+    if (appSettings.feat_pwa === 'true' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+            console.warn('Service Worker kayıt hatası:', err);
+        });
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -208,6 +231,11 @@ function applySettings(settings) {
     if (faqMenu) {
         faqMenu.style.display = settings.feat_faq === 'true' ? 'flex' : 'none';
     }
+    // feat_referral: Referans Kazanım Tab Butonu
+    const refTabBtn = document.getElementById('nav-referral');
+    if (refTabBtn) {
+        refTabBtn.style.display = settings.feat_referral === 'true' ? 'flex' : 'none';
+    }
 
     // feat_animations: Ekstra Animasyonlar
     if (settings.feat_animations === 'true') {
@@ -256,6 +284,36 @@ function applySettings(settings) {
     const exportOrdersBtn = document.getElementById('btn-export-orders-csv');
     if (exportOrdersBtn) {
         exportOrdersBtn.style.display = settings.feat_export === 'true' ? 'flex' : 'none';
+    }
+
+    // feat_activity_log: Aktivite Logu Tab Butonu
+    const activityLogTabBtn = document.getElementById('admin-tab-activity-log-btn');
+    if (activityLogTabBtn) {
+        activityLogTabBtn.style.display = settings.feat_activity_log === 'true' ? 'block' : 'none';
+    }
+
+    // feat_revenue: Gelir Raporu Tab Butonu
+    const revenueTabBtn = document.getElementById('admin-tab-revenue-btn');
+    if (revenueTabBtn) {
+        revenueTabBtn.style.display = settings.feat_revenue === 'true' ? 'block' : 'none';
+    }
+
+    // feat_auto_api: Otomatik API Tab Butonu
+    const autoApiTabBtn = document.getElementById('admin-tab-auto-api-btn');
+    if (autoApiTabBtn) {
+        autoApiTabBtn.style.display = settings.feat_auto_api === 'true' ? 'block' : 'none';
+    }
+
+    // feat_balance_history: Bakiye Geçmişi menü butonu
+    const balanceHistoryMenu = document.getElementById('menu-balance-history');
+    if (balanceHistoryMenu) {
+        balanceHistoryMenu.style.display = settings.feat_balance_history === 'true' ? 'flex' : 'none';
+    }
+
+    // feat_order_note: Sipariş notu alanı
+    const orderNoteGroup = document.getElementById('feat-order-note-group');
+    if (orderNoteGroup) {
+        orderNoteGroup.style.display = settings.feat_order_note === 'true' ? 'block' : 'none';
     }
 }
 
@@ -946,9 +1004,12 @@ function renderServices(filterPlatform) {
                         <span class="amount">${parseFloat(service.price_per_1000).toFixed(2)}</span>
                         <span class="unit">/ 1000</span>
                     </div>
-                    <button class="tg-button primary btn-buy" data-id="${service.id}" style="padding: 10px 16px; font-size: 14px; border-radius: 10px;">
-                        <i class="ph ph-shopping-cart"></i> Satın Al
-                    </button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        ${appSettings.feat_bulk_order === 'true' ? `<button class="btn-bulk-order" data-id="${service.id}" title="Toplu Sipariş" style="background:rgba(99,102,241,0.15); color:var(--tg-button-color); border:1px solid rgba(99,102,241,0.3); padding:9px 10px; border-radius:10px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;"><i class="ph ph-stack"></i></button>` : ''}
+                        <button class="tg-button primary btn-buy" data-id="${service.id}" style="padding: 10px 16px; font-size: 14px; border-radius: 10px;">
+                            <i class="ph ph-shopping-cart"></i> Satın Al
+                        </button>
+                    </div>
                 </div>
             `;
         } else {
@@ -965,7 +1026,10 @@ function renderServices(filterPlatform) {
                 </div>
                 <div class="service-footer">
                     <div class="price">₺${parseFloat(service.price_per_1000).toFixed(2)} <span>/ 1000 Adet</span></div>
-                    <button class="btn-buy" data-id="${service.id}">Satın Al</button>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        ${appSettings.feat_bulk_order === 'true' ? `<button class="btn-bulk-order" data-id="${service.id}" title="Toplu Sipariş" style="background:rgba(99,102,241,0.15); color:var(--tg-button-color); border:1px solid rgba(99,102,241,0.3); padding:7px 9px; border-radius:8px; font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;"><i class="ph ph-stack"></i></button>` : ''}
+                        <button class="btn-buy" data-id="${service.id}">Satın Al</button>
+                    </div>
                 </div>
             `;
         }
@@ -975,6 +1039,15 @@ function renderServices(filterPlatform) {
     document.querySelectorAll('.btn-buy').forEach(btn => {
         btn.addEventListener('click', (e) => {
             openOrderModal(parseInt(e.target.getAttribute('data-id')));
+        });
+    });
+
+    // Toplu Sipariş butonu dinleyicisi (feat_bulk_order)
+    document.querySelectorAll('.btn-bulk-order').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+            openBulkOrderModal(parseInt(e.currentTarget.getAttribute('data-id')));
         });
     });
 
@@ -1268,7 +1341,8 @@ const submitOrder = async () => {
                 link, 
                 quantity: qty, 
                 price: price,
-                coupon_code: (appSettings.feat_coupons === 'true' && currentCoupon) ? currentCoupon.code : null
+                coupon_code: (appSettings.feat_coupons === 'true' && currentCoupon) ? currentCoupon.code : null,
+                user_note: (appSettings.feat_order_note === 'true') ? (document.getElementById('order-user-note')?.value.trim() || null) : null
             })
         });
         const data = await response.json();
@@ -1363,6 +1437,14 @@ function setupPaymentModal() {
             const amountVal = parseFloat(inputPaymentAmount.value) || 0;
             const detailsVal = inputPaymentDetails.value.trim();
             if (amountVal <= 0) { showAlert("Lütfen geçerli bir tutar girin."); return; }
+
+            // min_deposit kontrolü
+            const minDeposit = parseFloat(appSettings.min_deposit_amount || '0') || 0;
+            if (minDeposit > 0 && amountVal < minDeposit) {
+                showAlert(`Minimum yükleme tutarı ₺${minDeposit.toFixed(2)} olmalıdır.`);
+                return;
+            }
+
             if (!detailsVal) { showAlert("Lütfen açıklama/isim bilgisini doldurun."); return; }
             btnSubmitPayment.disabled = true;
             btnSubmitPayment.textContent = "Gönderiliyor...";
@@ -1460,6 +1542,29 @@ function setupProfileMenu() {
             document.querySelector('[data-target="view-profile"]').classList.add('active');
         });
     }
+
+    // ─── FEAT: Bakiye Geçmişi ───
+    const menuBalanceHistory = document.getElementById('menu-balance-history');
+    if (menuBalanceHistory) {
+        menuBalanceHistory.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.nav-item').forEach(nav => {
+                nav.classList.remove('active');
+                const icon = nav.querySelector('i');
+                if (icon) icon.className = icon.className.replace('ph-fill', 'ph');
+            });
+            showView('view-balance-history');
+            loadBalanceHistory();
+        });
+    }
+
+    const btnBalanceHistoryBack = document.getElementById('btn-balance-history-back');
+    if (btnBalanceHistoryBack) {
+        btnBalanceHistoryBack.addEventListener('click', () => {
+            showView('view-profile');
+            document.querySelector('[data-target="view-profile"]')?.classList.add('active');
+        });
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1529,6 +1634,9 @@ function setupAdminPanel() {
             else if (tabId === 'tab-coupons') loadAdminCoupons();
             else if (tabId === 'tab-analytics') loadAdminAnalytics();
             else if (tabId === 'tab-support') loadAdminSupportMessages();
+            else if (tabId === 'tab-activity-log') loadActivityLog();
+            else if (tabId === 'tab-revenue') loadRevenueReport();
+            else if (tabId === 'tab-auto-api') loadAutoApiLog();
         });
     });
 
@@ -1651,6 +1759,9 @@ function setupAdminPanel() {
     // Export CSV events
     document.getElementById('btn-export-users-csv')?.addEventListener('click', exportUsersCSV);
     document.getElementById('btn-export-orders-csv')?.addEventListener('click', exportOrdersCSV);
+
+    // Auto API event listeners
+    setupAutoApi();
 }
 
 // ─── PAYMENTS TAB ────────────────────────────────────────────
@@ -2417,6 +2528,12 @@ const settingLabels = {
     bonus_desc: 'Bonus Banner Açıklaması',
     bonus_threshold: 'Bonus Eşik Tutarı (₺)',
     bonus_percent: 'Bonus Yüzdesi (%)',
+    min_deposit_amount: 'Min. Yükleme Tutarı (₺)',
+    auto_api_url: 'Harici API URL',
+    auto_api_key: 'Harici API Key',
+    auto_api_service_map: 'Servis Eşleme (JSON)',
+    app_url: 'Uygulama URL',
+    bot_username: 'Bot Kullanıcı Adı',
 };
 
 async function loadAdminSettings() {
@@ -2678,6 +2795,9 @@ async function loadAdminFeatures() {
                 { key: "feat_pwa", label: "📱 PWA Yükleme", group: "Ekstra Özellikler" },
                 { key: "feat_activity_log", label: "📝 Aktivite Logları", group: "Ekstra Özellikler" },
                 { key: "feat_auto_api", label: "🤖 Otomatik API Gönderimi", group: "Ekstra Özellikler" },
+                { key: "feat_revenue", label: "💰 Gelir Raporu Sekmesi", group: "Ekstra Özellikler" },
+                { key: "feat_balance_history", label: "📒 Bakiye Geçmişi (Kullanıcı)", group: "Ekstra Özellikler" },
+                { key: "feat_order_note", label: "📝 Sipariş Notu Alanı", group: "Ekstra Özellikler" },
                 { key: "feat_theme_color", label: "🌈 Dinamik Tema Rengi", group: "Ekstra Özellikler" },
                 { key: "feat_rich_notif", label: "🔔 Zengin Push Bildirimler", group: "Ekstra Özellikler" }
             ];
@@ -2790,14 +2910,14 @@ function updateVipAndReferralUI(data) {
             
             const refPercentText = document.getElementById('ref-bonus-percent-text');
             if (refPercentText) {
-                refPercentText.textContent = `%${appSettings.referral_percent || '10'}`;
+                refPercentText.textContent = `%5`;
             }
             
             const refLinkInput = document.getElementById('referral-link-input');
             if (refLinkInput) {
                 // Generate deep link for the Telegram bot
-                const cleanBrand = (appSettings.brand_name || 'bot').toLowerCase().replace(/\s+/g, '');
-                refLinkInput.value = `https://t.me/${cleanBrand}?startapp=${user.telegram_id}`;
+                const botUsername = appSettings.bot_username || 'SmmHizmetBot';
+                refLinkInput.value = `https://t.me/${botUsername}?start=${user.telegram_id}`;
             }
             
             document.getElementById('ref-count').textContent = data.referred_users_count || 0;
@@ -2805,6 +2925,25 @@ function updateVipAndReferralUI(data) {
         } else {
             referralContainer.style.display = 'none';
         }
+    }
+
+    // Dedicated Referral Tab Container
+    const refLinkInputDedicated = document.getElementById('referral-link-input-dedicated');
+    if (refLinkInputDedicated) {
+        const botUsername = appSettings.bot_username || 'SmmHizmetBot';
+        refLinkInputDedicated.value = `https://t.me/${botUsername}?start=${user.telegram_id}`;
+    }
+    const refPercentTextDedicated = document.getElementById('ref-bonus-percent-text-dedicated');
+    if (refPercentTextDedicated) {
+        refPercentTextDedicated.textContent = `%5`;
+    }
+    const refCountDedicated = document.getElementById('ref-count-dedicated');
+    if (refCountDedicated) {
+        refCountDedicated.textContent = data.referred_users_count || 0;
+    }
+    const refEarningsDedicated = document.getElementById('ref-earnings-dedicated');
+    if (refEarningsDedicated) {
+        refEarningsDedicated.textContent = `₺${parseFloat(user.referral_earnings || 0).toFixed(2)}`;
     }
 }
 
@@ -2870,6 +3009,525 @@ async function loadAdminCoupons() {
 }
 
 // ─── GROUP D CUSTOM RENDERING AND HELPERS ────────────────────────────────────
+
+// ─── FEAT: BALANCE HISTORY ───────────────────────────────────────────────────
+
+async function loadBalanceHistory() {
+    const container = document.getElementById('balance-history-container');
+    if (!container || !currentUserData) return;
+    container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Yükleniyor...</p>';
+    try {
+        const res = await fetch(`/api/user/balance-history?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (!data.success || data.history.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Henüz bakiye hareketi yok.</p>';
+            return;
+        }
+        const typeConfig = {
+            'sipariş':       { icon: 'ph-shopping-cart',   color: '#ef4444', sign: '-' },
+            'yükleme':       { icon: 'ph-trend-up',         color: '#22c55e', sign: '+' },
+            'admin_ekleme':  { icon: 'ph-plus-circle',      color: '#3b82f6', sign: '+' },
+            'iade':          { icon: 'ph-arrow-u-down-left',color: '#f59e0b', sign: '+' },
+            'komisyon':      { icon: 'ph-gift',             color: '#a855f7', sign: '+' },
+        };
+        container.innerHTML = data.history.map(h => {
+            const cfg = typeConfig[h.type] || { icon: 'ph-clock', color: 'var(--tg-hint-color)', sign: '' };
+            const date = new Date((h.created_at || '') + (h.created_at?.includes('Z') ? '' : 'Z'));
+            const dateStr = date.toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+            const amountStr = `${cfg.sign}₺${Math.abs(h.amount).toFixed(2)}`;
+            return `
+            <div style="display:flex;align-items:center;gap:12px;padding:12px;
+                background:var(--glass-bg);border:1px solid var(--glass-border);
+                border-radius:12px;margin-bottom:8px;">
+                <div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;
+                    background:${cfg.color}22;display:flex;align-items:center;
+                    justify-content:center;font-size:18px;color:${cfg.color};">
+                    <i class="ph-fill ${cfg.icon}"></i>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:600;color:var(--tg-text-color);">${h.description || h.type}</div>
+                    <div style="font-size:11px;color:var(--tg-hint-color);margin-top:2px;">${dateStr}</div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:14px;font-weight:700;color:${cfg.color};">${amountStr}</div>
+                    ${h.balance_after != null ? `<div style="font-size:10px;color:var(--tg-hint-color);">Kalan: ₺${parseFloat(h.balance_after).toFixed(2)}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center;color:var(--color-danger);padding:20px;">Yüklenemedi.</p>';
+    }
+}
+
+// ─── FEAT: ACTIVITY LOG ──────────────────────────────────────────────────────
+
+async function loadActivityLog(userIdFilter = null) {
+    const container = document.getElementById('activity-log-container');
+    if (!container || !currentUserData) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+
+    try {
+        let url = `/api/admin/activity-log?tg_id=${currentUserData.telegram_id}&limit=200`;
+        if (userIdFilter) url += `&user_id=${userIdFilter}`;
+
+        const res = await fetch(url);
+        if (!res.ok) {
+            container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:20px;">Aktivite logu özelliği aktif değil veya bir hata oluştu.</p>';
+            return;
+        }
+        const data = await res.json();
+        if (!data.success || data.logs.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Henüz log kaydı yok.</p>';
+            return;
+        }
+
+        // Aksiyon ikonları
+        const actionIcons = {
+            'kayıt': { icon: 'ph-user-plus', color: '#22c55e' },
+            'sipariş_verildi': { icon: 'ph-shopping-cart', color: '#6366f1' },
+            'ödeme_bildirimi': { icon: 'ph-money', color: '#f59e0b' },
+            'bakiye_yüklendi': { icon: 'ph-trend-up', color: '#22c55e' },
+            'sipariş_iptal': { icon: 'ph-x-circle', color: '#ef4444' },
+            'admin_bakiye_ekledi': { icon: 'ph-plus-circle', color: '#3b82f6' },
+        };
+
+        container.innerHTML = data.logs.map(log => {
+            const info = actionIcons[log.action] || { icon: 'ph-clock', color: 'var(--tg-hint-color)' };
+            const date = new Date(log.created_at + (log.created_at.includes('Z') ? '' : 'Z'));
+            const dateStr = date.toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+            const userName = log.first_name ? `${log.first_name}` : `ID:${log.user_id}`;
+            const userTag = log.custom_username ? ` @${log.custom_username}` : '';
+
+            return `
+            <div style="
+                display:flex; align-items:flex-start; gap:12px;
+                padding:12px; background:var(--glass-bg);
+                border:1px solid var(--glass-border); border-radius:12px; margin-bottom:8px;
+            ">
+                <div style="
+                    width:36px; height:36px; border-radius:50%; flex-shrink:0;
+                    background:${info.color}22;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:18px; color:${info.color};
+                ">
+                    <i class="ph-fill ${info.icon}"></i>
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
+                        <span style="font-size:13px; font-weight:600; color:var(--tg-text-color);">
+                            ${userName}${userTag}
+                        </span>
+                        <span style="font-size:11px; color:var(--tg-hint-color); white-space:nowrap; flex-shrink:0;">${dateStr}</span>
+                    </div>
+                    <div style="font-size:12px; color:${info.color}; font-weight:600; margin:2px 0;">${log.action.replace(/_/g, ' ')}</div>
+                    ${log.detail ? `<div style="font-size:12px; color:var(--tg-hint-color); line-height:1.4;">${log.detail}</div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        // Filtre butonuna event listener ekle (henüz yoksa)
+        const filterBtn = document.getElementById('btn-filter-activity-log');
+        if (filterBtn && !filterBtn._hasListener) {
+            filterBtn._hasListener = true;
+            filterBtn.addEventListener('click', () => {
+                const val = document.getElementById('activity-log-user-filter')?.value.trim();
+                loadActivityLog(val ? parseInt(val) : null);
+            });
+        }
+        const refreshBtn = document.getElementById('btn-refresh-activity-log');
+        if (refreshBtn && !refreshBtn._hasListener) {
+            refreshBtn._hasListener = true;
+            refreshBtn.addEventListener('click', () => {
+                const val = document.getElementById('activity-log-user-filter')?.value.trim();
+                loadActivityLog(val ? parseInt(val) : null);
+            });
+        }
+
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:20px;">Bağlantı hatası.</p>';
+        console.warn('Activity log yüklenemedi:', e);
+    }
+}
+
+// ─── FEAT: BULK ORDER ────────────────────────────────────────────────────────
+
+let _bulkServiceId = null;
+let _bulkServiceData = null;
+
+function openBulkOrderModal(serviceId) {
+    const service = smmServices.find(s => s.id === serviceId);
+    if (!service) return;
+    _bulkServiceId = serviceId;
+    _bulkServiceData = service;
+
+    document.getElementById('bulk-order-service-name').textContent = service.name;
+    document.getElementById('bulk-order-min').textContent = service.min_order;
+    document.getElementById('bulk-order-max').textContent = service.max_order;
+    document.getElementById('bulk-order-quantity').value = service.min_order;
+    document.getElementById('bulk-order-links').value = '';
+    document.getElementById('bulk-link-count').textContent = '0';
+    document.getElementById('bulk-price-preview').style.display = 'none';
+
+    const modal = document.getElementById('bulk-order-modal');
+    if (modal) modal.style.display = 'flex';
+
+    // Canlı link sayacı ve fiyat hesaplama
+    const linksTA = document.getElementById('bulk-order-links');
+    const qtyInput = document.getElementById('bulk-order-quantity');
+
+    function updateBulkPreview() {
+        const lines = linksTA.value.split('\n').filter(l => l.trim());
+        document.getElementById('bulk-link-count').textContent = lines.length;
+        const qty = parseInt(qtyInput.value) || 0;
+        if (lines.length > 0 && qty > 0) {
+            const unitP = ((service.price_per_1000 / 1000.0) * qty);
+            const totalP = unitP * lines.length;
+            document.getElementById('bulk-unit-price').textContent = `₺${unitP.toFixed(2)}`;
+            document.getElementById('bulk-total-price').textContent = `₺${totalP.toFixed(2)}`;
+            document.getElementById('bulk-price-preview').style.display = 'block';
+        } else {
+            document.getElementById('bulk-price-preview').style.display = 'none';
+        }
+    }
+
+    linksTA.oninput = updateBulkPreview;
+    qtyInput.oninput = updateBulkPreview;
+}
+
+document.getElementById('bulk-order-close')?.addEventListener('click', () => {
+    const modal = document.getElementById('bulk-order-modal');
+    if (modal) modal.style.display = 'none';
+});
+
+document.getElementById('btn-submit-bulk-order')?.addEventListener('click', async () => {
+    if (!_bulkServiceId || !currentUserData) return;
+
+    const qty = parseInt(document.getElementById('bulk-order-quantity').value);
+    const rawLinks = document.getElementById('bulk-order-links').value;
+    const links = rawLinks.split('\n').map(l => l.trim()).filter(Boolean);
+    const service = _bulkServiceData;
+
+    if (!qty || qty < service.min_order || qty > service.max_order) {
+        showAlert(`Miktar ${service.min_order} ile ${service.max_order} arasında olmalı.`);
+        return;
+    }
+    if (links.length === 0) {
+        showAlert('En az bir link giriniz.');
+        return;
+    }
+    if (links.length > 20) {
+        showAlert('Tek seferde en fazla 20 link girilebilir.');
+        return;
+    }
+
+    const btn = document.getElementById('btn-submit-bulk-order');
+    btn.disabled = true;
+    btn.textContent = 'İşleniyor...';
+
+    try {
+        const res = await fetch('/api/bulk-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                telegram_id: currentUserData.telegram_id,
+                service_id: _bulkServiceId,
+                links,
+                quantity: qty,
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('bulk-order-modal').style.display = 'none';
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+            showToast(`✅ ${links.length} sipariş oluşturuldu! Toplam: ₺${data.total_price.toFixed(2)}`);
+            await checkUserStatus(currentUserData.telegram_id);
+        } else {
+            showAlert(data.detail || 'Toplu sipariş başarısız.');
+        }
+    } catch (e) {
+        showAlert('Bağlantı hatası.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Toplu Sipariş Ver';
+    }
+});
+
+// ─── FEAT: AUTO API ──────────────────────────────────────────────────────────
+
+function setupAutoApi() {
+    // Test butonu
+    document.getElementById('btn-test-auto-api')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-test-auto-api');
+        const resultEl = document.getElementById('auto-api-test-result');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner"></i> Test ediliyor...';
+        resultEl.style.display = 'block';
+        resultEl.textContent = 'Bağlantı kuruluyor...';
+        resultEl.style.color = 'var(--tg-hint-color)';
+        try {
+            const res = await fetch(`/api/admin/auto-api/test?tg_id=${currentUserData.telegram_id}`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success && data.result && !data.result.error) {
+                resultEl.innerHTML = `✅ <strong>Bağlantı başarılı!</strong> API Bakiyesi: ${JSON.stringify(data.result)}`;
+                resultEl.style.color = '#22c55e';
+            } else {
+                resultEl.innerHTML = `❌ Hata: ${data.result?.error || data.detail || 'Bilinmeyen hata'}`;
+                resultEl.style.color = '#ef4444';
+            }
+        } catch (e) {
+            resultEl.textContent = '❌ Bağlantı hatası.';
+            resultEl.style.color = '#ef4444';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-wifi-high"></i> Bağlantıyı Test Et';
+        }
+    });
+
+    // Sipariş gönder
+    document.getElementById('btn-submit-auto-api-order')?.addEventListener('click', async () => {
+        const orderId = parseInt(document.getElementById('auto-api-order-id')?.value);
+        if (!orderId) { showAlert('Sipariş ID giriniz.'); return; }
+        const resultEl = document.getElementById('auto-api-order-result');
+        resultEl.style.display = 'block';
+        resultEl.textContent = 'Gönderiliyor...';
+        resultEl.style.color = 'var(--tg-hint-color)';
+        try {
+            const res = await fetch(
+                `/api/admin/auto-api/submit-order?tg_id=${currentUserData.telegram_id}&order_id=${orderId}`,
+                { method: 'POST' }
+            );
+            const data = await res.json();
+            if (data.success) {
+                resultEl.innerHTML = `✅ Gönderildi! Harici ID: <strong>${data.external_order_id}</strong>`;
+                resultEl.style.color = '#22c55e';
+                loadAutoApiLog();
+            } else {
+                resultEl.innerHTML = `❌ ${data.message || data.detail}`;
+                resultEl.style.color = '#ef4444';
+            }
+        } catch (e) {
+            resultEl.textContent = '❌ Bağlantı hatası.';
+            resultEl.style.color = '#ef4444';
+        }
+    });
+
+    // Durum sorgula
+    document.getElementById('btn-check-auto-api-status')?.addEventListener('click', async () => {
+        const orderId = parseInt(document.getElementById('auto-api-order-id')?.value);
+        if (!orderId) { showAlert('Sipariş ID giriniz.'); return; }
+        const resultEl = document.getElementById('auto-api-order-result');
+        resultEl.style.display = 'block';
+        resultEl.textContent = 'Durum sorgulanıyor...';
+        resultEl.style.color = 'var(--tg-hint-color)';
+        try {
+            const res = await fetch(
+                `/api/admin/auto-api/check-status?tg_id=${currentUserData.telegram_id}&order_id=${orderId}`,
+                { method: 'POST' }
+            );
+            const data = await res.json();
+            if (data.success) {
+                resultEl.innerHTML = `✅ API Durumu: <strong>${data.api_status}</strong> → Panel: <strong>${data.local_status}</strong>`;
+                resultEl.style.color = '#22c55e';
+            } else {
+                resultEl.innerHTML = `❌ ${data.message || data.detail}`;
+                resultEl.style.color = '#ef4444';
+            }
+        } catch (e) {
+            resultEl.textContent = '❌ Bağlantı hatası.';
+            resultEl.style.color = '#ef4444';
+        }
+    });
+
+    // Refresh
+    document.getElementById('btn-refresh-auto-api')?.addEventListener('click', loadAutoApiLog);
+}
+
+async function loadAutoApiLog() {
+    const container = document.getElementById('auto-api-log-container');
+    if (!container || !currentUserData) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:12px;">Yükleniyor...</p>';
+
+    try {
+        const res = await fetch(`/api/admin/auto-api/log?tg_id=${currentUserData.telegram_id}`);
+        if (!res.ok) {
+            container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:12px;">Özellik aktif değil veya hata oluştu.</p>';
+            return;
+        }
+        const data = await res.json();
+        if (!data.success || data.logs.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:12px;">Henüz API siparişi yok.</p>';
+            return;
+        }
+
+        const statusColors = {
+            completed: '#22c55e', pending: '#f59e0b',
+            'in progress': '#6366f1', processing: '#6366f1',
+            cancelled: '#ef4444', error: '#ef4444',
+        };
+
+        container.innerHTML = data.logs.map(log => {
+            const color = statusColors[log.status?.toLowerCase()] || 'var(--tg-hint-color)';
+            const date = log.created_at ? new Date(log.created_at + (log.created_at.includes('Z') ? '' : 'Z'))
+                .toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+            return `
+            <div style="
+                background:var(--glass-bg); border:1px solid var(--glass-border);
+                border-radius:12px; padding:12px; margin-bottom:8px;
+                display:flex; flex-direction:column; gap:4px;
+            ">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:13px; font-weight:700; color:var(--tg-text-color);">
+                        Sipariş #${log.order_id}
+                        <span style="font-size:11px; color:var(--tg-hint-color); font-weight:400;"> — ${log.first_name || ''} @${log.custom_username || ''}</span>
+                    </span>
+                    <span style="font-size:11px; font-weight:700; color:${color}; background:${color}22;
+                        padding:2px 8px; border-radius:20px;">${log.status || 'pending'}</span>
+                </div>
+                <div style="font-size:12px; color:var(--tg-hint-color);">
+                    ${log.service_name || 'Servis'} · ${log.quantity || 0} adet · ₺${parseFloat(log.price || 0).toFixed(2)}
+                </div>
+                <div style="font-size:11px; color:var(--tg-hint-color); display:flex; justify-content:space-between;">
+                    <span>Harici ID: <code style="font-size:11px;">${log.external_order_id || '—'}</code></span>
+                    <span>${date}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+    } catch (e) {
+        container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:12px;">Bağlantı hatası.</p>';
+    }
+}
+
+// ─── FEAT: REVENUE REPORT ────────────────────────────────────────────────────
+
+let revenueChartInstance = null;
+
+async function loadRevenueReport() {
+    if (!currentUserData) return;
+
+    // Kartları sıfırla
+    ['rev-daily','rev-weekly','rev-monthly','rev-total',
+     'rev-deposits','rev-pending','rev-refund','rev-balance'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = 'Yükleniyor...';
+    });
+
+    const breakdownEl = document.getElementById('rev-platform-breakdown');
+    if (breakdownEl) breakdownEl.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);">Yükleniyor...</p>';
+
+    // Refresh butonu
+    const refreshBtn = document.getElementById('btn-refresh-revenue');
+    if (refreshBtn && !refreshBtn._hasListener) {
+        refreshBtn._hasListener = true;
+        refreshBtn.addEventListener('click', () => loadRevenueReport());
+    }
+
+    try {
+        const res = await fetch(`/api/admin/revenue-report?tg_id=${currentUserData.telegram_id}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            ['rev-daily','rev-weekly','rev-monthly','rev-total'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '—';
+            });
+            if (breakdownEl) breakdownEl.innerHTML = `<p style="text-align:center;color:var(--color-danger);padding:12px;">${err.detail || 'Gelir raporu aktif değil.'}</p>`;
+            return;
+        }
+        const data = await res.json();
+        if (!data.success) return;
+
+        const r = data.report;
+
+        // Kartları doldur
+        const fmt = v => `₺${parseFloat(v || 0).toFixed(2)}`;
+        document.getElementById('rev-daily').textContent    = fmt(r.daily_revenue);
+        document.getElementById('rev-weekly').textContent   = fmt(r.weekly_revenue);
+        document.getElementById('rev-monthly').textContent  = fmt(r.monthly_revenue);
+        document.getElementById('rev-total').textContent    = fmt(r.total_revenue);
+        document.getElementById('rev-deposits').textContent = fmt(r.total_deposits);
+        document.getElementById('rev-pending').textContent  = fmt(r.pending_deposits);
+        document.getElementById('rev-refund').textContent   = fmt(r.total_refund);
+        document.getElementById('rev-balance').textContent  = fmt(r.total_user_balance);
+
+        // Grafik — son 30 gün
+        const labels  = r.daily_breakdown.map(d => d.date.slice(5));   // MM-DD
+        const amounts = r.daily_breakdown.map(d => d.revenue);
+        const ctx = document.getElementById('revenueChartCanvas')?.getContext('2d');
+        if (ctx) {
+            if (revenueChartInstance) revenueChartInstance.destroy();
+            revenueChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels.length ? labels : ['Veri Yok'],
+                    datasets: [{
+                        label: 'Günlük Ciro (₺)',
+                        data: amounts.length ? amounts : [0],
+                        backgroundColor: 'rgba(99,102,241,0.6)',
+                        borderColor: '#6366f1',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'var(--tg-hint-color)', font: { size: 10 } } },
+                        x: { grid: { display: false }, ticks: { color: 'var(--tg-hint-color)', font: { size: 10 }, maxTicksLimit: 10 } }
+                    }
+                }
+            });
+        }
+
+        // Platform bazlı tablo
+        if (breakdownEl) {
+            if (!r.platform_revenue || r.platform_revenue.length === 0) {
+                breakdownEl.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);">Henüz veri yok.</p>';
+            } else {
+                const platformIcons = {
+                    instagram: { icon: 'ph-instagram-logo', color: '#e1306c' },
+                    tiktok:    { icon: 'ph-tiktok-logo',    color: '#69C9D0' },
+                    twitter:   { icon: 'ph-twitter-logo',   color: '#1DA1F2' },
+                    youtube:   { icon: 'ph-youtube-logo',   color: '#FF0000' },
+                    other:     { icon: 'ph-star',           color: '#a855f7' },
+                };
+                const totalRev = r.platform_revenue.reduce((s, p) => s + p.revenue, 0) || 1;
+                breakdownEl.innerHTML = r.platform_revenue.map(p => {
+                    const pInfo = platformIcons[p.platform] || platformIcons.other;
+                    const pct = ((p.revenue / totalRev) * 100).toFixed(1);
+                    return `
+                    <div style="
+                        display:flex; align-items:center; gap:10px;
+                        background:var(--glass-bg); border:1px solid var(--glass-border);
+                        border-radius:12px; padding:12px; margin-bottom:8px;
+                    ">
+                        <div style="
+                            width:36px; height:36px; border-radius:10px; flex-shrink:0;
+                            background:${pInfo.color}22;
+                            display:flex; align-items:center; justify-content:center;
+                            font-size:20px; color:${pInfo.color};
+                        "><i class="ph-fill ${pInfo.icon}"></i></div>
+                        <div style="flex:1; min-width:0;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                                <span style="font-size:13px; font-weight:600; color:var(--tg-text-color); text-transform:capitalize;">${p.platform}</span>
+                                <span style="font-size:13px; font-weight:700; color:var(--tg-text-color);">₺${p.revenue.toFixed(2)}</span>
+                            </div>
+                            <div style="background:var(--tg-secondary-bg-color); border-radius:4px; height:4px; overflow:hidden;">
+                                <div style="width:${pct}%; height:100%; background:${pInfo.color}; border-radius:4px;"></div>
+                            </div>
+                            <div style="font-size:10px; color:var(--tg-hint-color); margin-top:3px;">${p.order_count} sipariş · %${pct}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+    } catch (e) {
+        console.warn('Gelir raporu yüklenemedi:', e);
+        if (breakdownEl) breakdownEl.innerHTML = '<p style="text-align:center;color:var(--color-danger);padding:12px;">Bağlantı hatası.</p>';
+    }
+}
 
 async function loadAdminAnalytics() {
     try {
