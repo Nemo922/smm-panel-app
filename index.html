@@ -16,7 +16,7 @@
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
     <!-- Chart.js library for feat_analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -368,6 +368,16 @@
                     <i class="ph ph-chart-line"></i>
                     <span>Analizler</span>
                 </button>
+                <button class="admin-tab" data-tab="tab-support" id="admin-tab-support-btn">
+                    <i class="ph ph-headset"></i>
+                    <span>Destek</span>
+                    <span id="support-pending-badge" style="
+                        display:none; background:#ef4444; color:#fff;
+                        border-radius:50%; width:16px; height:16px; font-size:9px;
+                        font-weight:700; align-items:center; justify-content:center;
+                        margin-left:2px;
+                    "></span>
+                </button>
             </div>
 
             <!-- TAB 1: Bekleyen Ödemeler -->
@@ -377,6 +387,17 @@
                     <button class="btn-refresh" id="btn-admin-refresh"><i class="ph ph-arrows-clockwise"></i></button>
                 </div>
                 <div class="admin-payments-list" id="admin-payments-container">
+                    <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <!-- TAB: Destek Mesajları -->
+            <div class="admin-tab-content" id="tab-support">
+                <div class="admin-section-header">
+                    <span>Destek Talepleri</span>
+                    <button class="btn-refresh" id="btn-refresh-support"><i class="ph ph-arrows-clockwise"></i></button>
+                </div>
+                <div id="admin-support-list">
                     <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
                 </div>
             </div>
@@ -1013,6 +1034,6 @@
     </div>
 
     <!-- Custom Scripts -->
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>

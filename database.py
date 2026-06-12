@@ -99,6 +99,20 @@ async def init_db():
                 used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # FEAT: Support Chat - Engelli kullanıcı destek mesajları
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS support_messages (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                first_name TEXT,
+                username TEXT,
+                message TEXT NOT NULL,
+                reply TEXT,
+                is_read BOOLEAN DEFAULT FALSE,
+                replied_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         # Services table - products managed from admin panel
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS services (
@@ -196,6 +210,9 @@ async def init_db():
             ('feat_order_progress', 'false'),
             ('feat_rich_notif', 'false'),
             ('feat_service_redesign', 'false'),
+            ('support_chat_enabled', 'true'),
+            ('app_url', ''),
+            ('bot_username', ''),
         ]
         for key, value in default_settings:
             await conn.execute(
@@ -644,5 +661,42 @@ async def send_bulk_notification_db(title: str, message: str):
                     uid, title, message
                 )
         return user_ids
+
+# ─── SUPPORT CHAT FUNCTIONS ──────────────────────────────────────────────────
+
+async def create_support_message(user_id: int, first_name: str, username: str, message: str):
+    if not db_pool: return None
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO support_messages (user_id, first_name, username, message) VALUES ($1,$2,$3,$4) RETURNING id",
+            user_id, first_name, username, message
+        )
+        return row['id'] if row else None
+
+async def get_support_messages_for_user(user_id: int):
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM support_messages WHERE user_id=$1 ORDER BY created_at ASC",
+            user_id
+        )
+        return [dict(r) for r in rows]
+
+async def get_all_support_messages():
+    if not db_pool: return []
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM support_messages ORDER BY created_at DESC LIMIT 200"
+        )
+        return [dict(r) for r in rows]
+
+async def reply_support_message(msg_id: int, reply: str):
+    if not db_pool: return False
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE support_messages SET reply=$1, is_read=TRUE, replied_at=NOW() WHERE id=$2",
+            reply, msg_id
+        )
+        return True
 
 

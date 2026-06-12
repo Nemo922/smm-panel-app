@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -709,6 +709,146 @@ async def admin_bulk_notify(data: AdminBulkNotify, background_tasks: BackgroundT
     background_tasks.add_task(send_bulk_telegram_job, user_ids, tg_text)
     
     return {"success": True, "message": f"Toplu bildirim sıraya alındı. {len(user_ids)} üyeye iletiliyor."}
+
+# ═══════════════════════════════════════════════════════════════
+# DESTEK CHAT SİSTEMİ (ENGELLİ KULLANICILER)
+# ═══════════════════════════════════════════════════════════════
+
+class SupportMessage(BaseModel):
+    user_id: int
+    first_name: str
+    username: str
+    message: str
+
+class SupportReply(BaseModel):
+    admin_id: int
+    msg_id: int
+    reply: str
+
+@app.post("/api/support/send")
+async def support_send(data: SupportMessage):
+    """Engelli kullanıcıdan destek mesajı al."""
+    msg_id = await database.create_support_message(
+        data.user_id, data.first_name, data.username, data.message
+    )
+    if msg_id is None:
+        raise HTTPException(status_code=500, detail="Mesaj gönderilemedi.")
+    
+    # Admin'e Telegram bildirimi gönder
+    settings = await database.get_settings()
+    admin_ids = get_admin_ids()
+    notif_text = (
+        f"🆘 <b>Yeni Destek Talebi #{msg_id}</b>\n"
+        f"👤 {html.escape(data.first_name)} ({html.escape(data.username)})\n"
+        f"🆔 <code>{data.user_id}</code>\n\n"
+        f"💬 {html.escape(data.message)}\n\n"
+        f"<i>Yanıtlamak için: /reply {msg_id} [yanıtınız]</i>"
+    )
+    for admin_id in admin_ids:
+        await send_telegram_message(admin_id, notif_text)
+    
+    return {"success": True, "msg_id": msg_id}
+
+@app.get("/api/support/messages")
+async def support_get_user_messages(user_id: int):
+    """Kullanıcının kendi destek mesajlarını getir."""
+    messages = await database.get_support_messages_for_user(user_id)
+    # datetime nesnelerini string'e çevir
+    for m in messages:
+        for k, v in m.items():
+            if hasattr(v, 'isoformat'):
+                m[k] = v.isoformat()
+    return {"success": True, "messages": messages}
+
+@app.get("/api/admin/support/messages")
+async def admin_get_support_messages(tg_id: int):
+    """Admin: tüm destek mesajlarını listele."""
+    verify_admin(tg_id)
+    messages = await database.get_all_support_messages()
+    for m in messages:
+        for k, v in m.items():
+            if hasattr(v, 'isoformat'):
+                m[k] = v.isoformat()
+    return {"success": True, "messages": messages}
+
+@app.post("/api/admin/support/reply")
+async def admin_reply_support(data: SupportReply):
+    """Admin: destek mesajına yanıt ver."""
+    verify_admin(data.admin_id)
+    await database.reply_support_message(data.msg_id, data.reply)
+    
+    # Veritabanından kullanıcı ID'sini al ve bildirim gönder
+    msgs = await database.get_all_support_messages()
+    target = next((m for m in msgs if m['id'] == data.msg_id), None)
+    if target:
+        user_tg_id = target['user_id']
+        reply_text = (
+            f"✅ <b>Destek Yanıtı</b>\n\n"
+            f"Mesajınıza yanıt verildi:\n\n"
+            f"💬 <i>{html.escape(data.reply)}</i>"
+        )
+        await send_telegram_message(user_tg_id, reply_text)
+    
+    return {"success": True}
+
+# ═══════════════════════════════════════════════════════════════
+# TELEGRAM BOT WEBHOOK
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/telegram-webhook")
+async def telegram_webhook(request: Request):
+    """Telegram botundan gelen güncelleme işleyicisi."""
+    try:
+        body = await request.json()
+        message = body.get("message") or body.get("edited_message")
+        if not message:
+            return {"ok": True}
+        
+        chat_id = message.get("chat", {}).get("id")
+        text = message.get("text", "") or ""
+        admin_ids = get_admin_ids()
+        
+        # Admin'in /reply <id> <yanıt> komutu
+        if chat_id in admin_ids and text.startswith("/reply "):
+            parts = text[7:].split(" ", 1)
+            if len(parts) == 2 and parts[0].isdigit():
+                msg_id = int(parts[0])
+                reply_text = parts[1]
+                await database.reply_support_message(msg_id, reply_text)
+                
+                # Kullanıcıya bildir
+                msgs = await database.get_all_support_messages()
+                target = next((m for m in msgs if m['id'] == msg_id), None)
+                if target:
+                    await send_telegram_message(
+                        target['user_id'],
+                        f"✅ <b>Destek Yanıtı</b>\n\n{html.escape(reply_text)}"
+                    )
+                await send_telegram_message(chat_id, f"✅ Mesaj #{msg_id} yanıtlandı.")
+            else:
+                await send_telegram_message(chat_id, "⚠️ Format: /reply <mesaj_id> <yanıtınız>")
+        
+        # /support_list komutu
+        elif chat_id in admin_ids and text == "/support_list":
+            msgs = await database.get_all_support_messages()
+            if not msgs:
+                await send_telegram_message(chat_id, "📭 Henüz destek mesajı yok.")
+            else:
+                pending = [m for m in msgs if not m.get('reply')]
+                lines = [f"📋 <b>Bekleyen Talepler ({len(pending)} adet)</b>\n"]
+                for m in pending[:10]:
+                    lines.append(
+                        f"#{m['id']} | {html.escape(m.get('first_name',''))} | "
+                        f"{str(m.get('created_at',''))[:16]}\n"
+                        f"  → {html.escape(m['message'][:60])}"
+                    )
+                await send_telegram_message(chat_id, "\n".join(lines))
+        
+        return {"ok": True}
+    except Exception as e:
+        print(f"Webhook hata: {e}")
+        return {"ok": True}
+
 
 # ═══════════════════════════════════════════════════════════════
 # STATİK DOSYALAR

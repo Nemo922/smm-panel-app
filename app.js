@@ -275,6 +275,351 @@ async function loadServicesFromBackend() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// DESTEK CHAT — ENGELLİ KULLANICI
+// ═══════════════════════════════════════════════════════════════
+let supportPollingInterval = null;
+
+function showBlockedScreen(reason) {
+    // Tüm splash ve ana içeriği gizle
+    document.body.innerHTML = `
+        <!-- Engelli Ekranı -->
+        <div id="blocked-screen" style="
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            min-height:100vh; text-align:center; padding:30px 20px;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a0f0f 100%);
+            font-family:'Inter',sans-serif; color:#f1f1f1; position:relative; overflow:hidden;
+        ">
+            <!-- Arka plan efekti -->
+            <div style="
+                position:absolute; inset:0; background:radial-gradient(ellipse at 50% 0%, rgba(220,38,38,0.15) 0%, transparent 70%);
+                pointer-events:none;
+            "></div>
+
+            <!-- İkon -->
+            <div style="
+                width:90px; height:90px; border-radius:50%;
+                background:linear-gradient(135deg, rgba(220,38,38,0.2), rgba(220,38,38,0.05));
+                border:2px solid rgba(220,38,38,0.4);
+                display:flex; align-items:center; justify-content:center;
+                margin-bottom:24px; position:relative;
+                box-shadow: 0 0 40px rgba(220,38,38,0.3);
+            ">
+                <i class="ph-fill ph-prohibit" style="font-size:48px; color:#ef4444;"></i>
+            </div>
+
+            <!-- Başlık -->
+            <h1 style="font-size:22px; font-weight:700; margin:0 0 10px; color:#fff;">Erişim Engellendi</h1>
+            <p style="color:#9ca3af; font-size:14px; line-height:1.6; max-width:280px; margin:0 0 32px;">
+                ${reason}
+            </p>
+
+            <!-- Bilgi Kutusu -->
+            <div style="
+                background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
+                border-radius:14px; padding:16px 20px; max-width:300px; width:100%;
+                text-align:left; margin-bottom:20px;
+            ">
+                <p style="color:#d1d5db; font-size:13px; margin:0; line-height:1.6;">
+                    💡 Hesabınızla ilgili bir sorun yaşandığını düşünüyorsanız, sağ alttaki
+                    <strong style="color:#60a5fa;">Destek Al</strong> butonuna tıklayarak
+                    bize mesaj gönderebilirsiniz.
+                </p>
+            </div>
+        </div>
+
+        <!-- Destek FAB Butonu -->
+        <button id="support-fab-btn" onclick="openSupportChat()" style="
+            position:fixed; bottom:24px; right:24px; z-index:9999;
+            width:60px; height:60px; border-radius:50%; border:none; cursor:pointer;
+            background:linear-gradient(135deg, #3b82f6, #2563eb);
+            box-shadow:0 4px 20px rgba(59,130,246,0.5);
+            display:flex; align-items:center; justify-content:center;
+            font-size:26px; color:white;
+            animation: supportPulse 2.5s infinite;
+            transition: transform 0.2s, box-shadow 0.2s;
+        " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+            <i class="ph-fill ph-chat-circle-dots"></i>
+            <span id="support-unread-badge" style="
+                position:absolute; top:4px; right:4px;
+                background:#ef4444; color:white; border-radius:50%;
+                width:18px; height:18px; font-size:10px; font-weight:700;
+                display:none; align-items:center; justify-content:center;
+                border:2px solid #1e3a8a;
+            "></span>
+        </button>
+
+        <!-- Destek Chat Modalı -->
+        <div id="support-chat-modal" style="
+            position:fixed; inset:0; z-index:10000;
+            background:rgba(0,0,0,0.7); backdrop-filter:blur(8px);
+            display:none; align-items:flex-end; justify-content:center;
+            padding:0;
+        ">
+            <div style="
+                width:100%; max-width:480px;
+                height:85vh; background:#111827;
+                border-radius:20px 20px 0 0;
+                border:1px solid rgba(255,255,255,0.1);
+                display:flex; flex-direction:column;
+                overflow:hidden;
+                transform:translateY(100%);
+                transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+            " id="support-chat-inner">
+                <!-- Header -->
+                <div style="
+                    padding:16px 20px; background:#1f2937;
+                    border-bottom:1px solid rgba(255,255,255,0.08);
+                    display:flex; align-items:center; gap:12px; flex-shrink:0;
+                ">
+                    <div style="
+                        width:40px; height:40px; border-radius:50%;
+                        background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+                        display:flex; align-items:center; justify-content:center;
+                        font-size:20px; color:white; flex-shrink:0;
+                    "><i class="ph-fill ph-headset"></i></div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:700; color:#f9fafb; font-size:15px;">Destek Hattı</div>
+                        <div style="color:#6b7280; font-size:12px;" id="support-status-text">Bağlanıyor...</div>
+                    </div>
+                    <button onclick="closeSupportChat()" style="
+                        background:rgba(255,255,255,0.1); border:none; border-radius:50%;
+                        width:32px; height:32px; cursor:pointer; color:#9ca3af;
+                        display:flex; align-items:center; justify-content:center; font-size:18px;
+                        transition:background 0.2s;
+                    " onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+                        <i class="ph ph-x"></i>
+                    </button>
+                </div>
+
+                <!-- Mesaj Alanı -->
+                <div id="support-messages-area" style="
+                    flex:1; overflow-y:auto; padding:16px;
+                    display:flex; flex-direction:column; gap:10px;
+                    scroll-behavior:smooth;
+                ">
+                    <!-- İlk hoşgeldin mesajı -->
+                    <div style="
+                        background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.2);
+                        border-radius:12px; padding:12px 14px; max-width:85%; align-self:flex-start;
+                    ">
+                        <p style="color:#93c5fd; font-size:13px; margin:0; line-height:1.5;">
+                            👋 Merhaba! Destek ekibine bağlandınız. Mesajınızı yazın, en kısa sürede yanıtlayacağız.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Input Alanı -->
+                <div style="
+                    padding:12px 16px; background:#1f2937;
+                    border-top:1px solid rgba(255,255,255,0.08);
+                    display:flex; gap:10px; align-items:flex-end; flex-shrink:0;
+                ">
+                    <textarea id="support-input" placeholder="Mesajınızı yazın..." rows="1"
+                        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
+                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSupportMessage();}"
+                        style="
+                            flex:1; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.1);
+                            border-radius:12px; padding:10px 14px; color:#f9fafb; font-size:14px;
+                            resize:none; font-family:inherit; outline:none; min-height:42px;
+                            transition:border-color 0.2s;
+                        "
+                        onfocus="this.style.borderColor='rgba(59,130,246,0.5)'"
+                        onblur="this.style.borderColor='rgba(255,255,255,0.1)'"
+                    ></textarea>
+                    <button onclick="sendSupportMessage()" id="support-send-btn" style="
+                        width:42px; height:42px; border-radius:12px; border:none; cursor:pointer;
+                        background:linear-gradient(135deg,#3b82f6,#2563eb);
+                        color:white; font-size:18px; flex-shrink:0;
+                        display:flex; align-items:center; justify-content:center;
+                        transition:transform 0.15s, opacity 0.15s;
+                        box-shadow:0 2px 8px rgba(59,130,246,0.4);
+                    " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                        <i class="ph-fill ph-paper-plane-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <style>
+        @keyframes supportPulse {
+            0%, 100% { box-shadow: 0 4px 20px rgba(59,130,246,0.5); }
+            50% { box-shadow: 0 4px 30px rgba(59,130,246,0.8), 0 0 0 8px rgba(59,130,246,0.1); }
+        }
+        </style>
+    `;
+
+    // Modal animasyonu başlat
+    setTimeout(() => {
+        const inner = document.getElementById('support-chat-inner');
+        if (inner) inner.style.transform = '';
+    }, 50);
+
+    // Eğer kullanıcı daha önce mesaj gönderdiyse yükle
+    loadSupportMessages();
+}
+
+function openSupportChat() {
+    const modal = document.getElementById('support-chat-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    requestAnimationFrame(() => {
+        const inner = document.getElementById('support-chat-inner');
+        if (inner) inner.style.transform = 'translateY(0)';
+    });
+    document.getElementById('support-status-text').textContent = 'Çevrimiçi · Genellikle birkaç saat içinde yanıt verilir';
+
+    // Mesajları yükle ve her 15 sn güncelle
+    loadSupportMessages();
+    if (!supportPollingInterval) {
+        supportPollingInterval = setInterval(loadSupportMessages, 15000);
+    }
+}
+
+function closeSupportChat() {
+    const inner = document.getElementById('support-chat-inner');
+    if (inner) inner.style.transform = 'translateY(100%)';
+    setTimeout(() => {
+        const modal = document.getElementById('support-chat-modal');
+        if (modal) modal.style.display = 'none';
+    }, 350);
+    if (supportPollingInterval) {
+        clearInterval(supportPollingInterval);
+        supportPollingInterval = null;
+    }
+}
+
+async function loadSupportMessages() {
+    if (!currentUserData) return;
+    try {
+        const res = await fetch(`/api/support/messages?user_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        const area = document.getElementById('support-messages-area');
+        if (!area) return;
+
+        // Mevcut kullanıcı mesajlarını render et (hoşgeldin mesajından sonra)
+        const userMsgs = area.querySelectorAll('.chat-msg');
+        userMsgs.forEach(el => el.remove());
+
+        let hasUnreplied = false;
+        data.messages.forEach(msg => {
+            // Kullanıcı mesajı (sağ)
+            const userDiv = document.createElement('div');
+            userDiv.className = 'chat-msg';
+            userDiv.style.cssText = 'display:flex; justify-content:flex-end;';
+            userDiv.innerHTML = `
+                <div style="
+                    background:linear-gradient(135deg,rgba(59,130,246,0.3),rgba(37,99,235,0.2));
+                    border:1px solid rgba(59,130,246,0.3);
+                    border-radius:14px 14px 4px 14px; padding:10px 14px;
+                    max-width:80%; color:#e2e8f0; font-size:13px; line-height:1.5;
+                ">
+                    <p style="margin:0;">${escapeHtmlSupport(msg.message)}</p>
+                    <span style="font-size:10px; color:#6b7280; margin-top:4px; display:block; text-align:right;">
+                        ${formatSupportTime(msg.created_at)}
+                    </span>
+                </div>`;
+            area.appendChild(userDiv);
+
+            // Admin yanıtı (sol)
+            if (msg.reply) {
+                const replyDiv = document.createElement('div');
+                replyDiv.className = 'chat-msg';
+                replyDiv.style.cssText = 'display:flex; justify-content:flex-start;';
+                replyDiv.innerHTML = `
+                    <div style="
+                        background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.25);
+                        border-radius:14px 14px 14px 4px; padding:10px 14px;
+                        max-width:80%; font-size:13px; line-height:1.5;
+                    ">
+                        <div style="font-size:10px; color:#22c55e; font-weight:600; margin-bottom:4px;">
+                            ✓ Destek Ekibi
+                        </div>
+                        <p style="margin:0; color:#d1fae5;">${escapeHtmlSupport(msg.reply)}</p>
+                        <span style="font-size:10px; color:#6b7280; margin-top:4px; display:block;">
+                            ${formatSupportTime(msg.replied_at)}
+                        </span>
+                    </div>`;
+                area.appendChild(replyDiv);
+            } else {
+                hasUnreplied = true;
+            }
+        });
+
+        // Okunmamış badge göster
+        const badge = document.getElementById('support-unread-badge');
+        if (badge) {
+            const unreadReplies = data.messages.filter(m => m.reply && !m.is_read).length;
+            if (unreadReplies > 0) {
+                badge.textContent = unreadReplies;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        // En alta scroll
+        area.scrollTop = area.scrollHeight;
+
+    } catch (e) {
+        console.warn('Destek mesajları yüklenemedi:', e);
+    }
+}
+
+async function sendSupportMessage() {
+    const input = document.getElementById('support-input');
+    if (!input || !currentUserData) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    const btn = document.getElementById('support-send-btn');
+    if (btn) btn.disabled = true;
+    input.disabled = true;
+
+    try {
+        const res = await fetch('/api/support/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: currentUserData.telegram_id,
+                first_name: currentUserData.first_name || 'Kullanıcı',
+                username: currentUserData.username || '',
+                message: text
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            input.value = '';
+            input.style.height = 'auto';
+            await loadSupportMessages();
+        } else {
+            alert('Mesaj gönderilemedi, lütfen tekrar deneyin.');
+        }
+    } catch (e) {
+        alert('Bağlantı hatası.');
+    } finally {
+        if (btn) btn.disabled = false;
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+function escapeHtmlSupport(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function formatSupportTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' }) +
+               ' · ' + d.toLocaleDateString('tr-TR', { day:'numeric', month:'short' });
+    } catch { return ''; }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // USER AUTH
 // ═══════════════════════════════════════════════════════════════
 async function checkUserStatus(tg_id) {
@@ -282,13 +627,7 @@ async function checkUserStatus(tg_id) {
         const response = await fetch(`/api/user?tg_id=${tg_id}`);
         if (response.status === 403) {
             const errData = await response.json();
-            document.body.innerHTML = `
-                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; text-align:center; padding:30px; font-family:'Inter',sans-serif; background:var(--tg-bg-color); color:var(--tg-text-color);">
-                    <i class="ph-fill ph-prohibit" style="font-size:64px; color:var(--color-danger); margin-bottom:16px;"></i>
-                    <h2>Erişim Engellendi</h2>
-                    <p style="color:var(--tg-hint-color); margin-top:8px; line-height:1.5;">${errData.detail || 'Hesabınız askıya alınmıştır.'}</p>
-                </div>
-            `;
+            showBlockedScreen(errData.detail || 'Hesabınız askıya alınmıştır.');
             return;
         }
         const data = await response.json();
@@ -1180,6 +1519,7 @@ function setupAdminPanel() {
             else if (tabId === 'tab-features') loadAdminFeatures();
             else if (tabId === 'tab-coupons') loadAdminCoupons();
             else if (tabId === 'tab-analytics') loadAdminAnalytics();
+            else if (tabId === 'tab-support') loadAdminSupportMessages();
         });
     });
 
@@ -1225,6 +1565,7 @@ function setupAdminPanel() {
     document.getElementById('btn-refresh-orders')?.addEventListener('click', loadAdminOrders);
     document.getElementById('btn-refresh-settings')?.addEventListener('click', loadAdminSettings);
     document.getElementById('btn-refresh-features')?.addEventListener('click', loadAdminFeatures);
+    document.getElementById('btn-refresh-support')?.addEventListener('click', loadAdminSupportMessages);
 
     // Toggle hidden orders
     const btnToggleHidden = document.getElementById('btn-toggle-hidden-orders');
@@ -2616,4 +2957,168 @@ function downloadCSV(csvContent, fileName) {
         link.click();
         document.body.removeChild(link);
     }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ADMİN — DESTEK MESAJLARI
+// ═══════════════════════════════════════════════════════════════
+async function loadAdminSupportMessages() {
+    const container = document.getElementById('admin-support-list');
+    if (!container || !currentUserData) return;
+    container.innerHTML = '<p style="text-align:center; color:var(--tg-hint-color); padding:20px;">Yükleniyor...</p>';
+
+    try {
+        const res = await fetch(`/api/admin/support/messages?tg_id=${currentUserData.telegram_id}`);
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            container.innerHTML = '<p style="text-align:center; color:var(--color-danger); padding:20px;">Yüklenemedi.</p>';
+            return;
+        }
+
+        const msgs = data.messages;
+        const pending = msgs.filter(m => !m.reply);
+
+        // Update badge on tab button
+        const badge = document.getElementById('support-pending-badge');
+        if (badge) {
+            if (pending.length > 0) {
+                badge.textContent = pending.length;
+                badge.style.display = 'inline-flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        if (msgs.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center; padding:40px 20px; color:var(--tg-hint-color);">
+                    <i class="ph ph-chat-circle-slash" style="font-size:48px; opacity:0.4; display:block; margin-bottom:12px;"></i>
+                    <p>Henüz destek mesajı yok.</p>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = '';
+
+        // Stats strip
+        const statsDiv = document.createElement('div');
+        statsDiv.style.cssText = 'display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;';
+        statsDiv.innerHTML = `
+            <div style="flex:1; min-width:120px; background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.25); border-radius:12px; padding:12px; text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:#ef4444;">${pending.length}</div>
+                <div style="font-size:11px; color:var(--tg-hint-color);">Bekleyen</div>
+            </div>
+            <div style="flex:1; min-width:120px; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.25); border-radius:12px; padding:12px; text-align:center;">
+                <div style="font-size:22px; font-weight:800; color:#22c55e;">${msgs.length - pending.length}</div>
+                <div style="font-size:11px; color:var(--tg-hint-color);">Yanıtlandı</div>
+            </div>`;
+        container.appendChild(statsDiv);
+
+        msgs.forEach(msg => {
+            const card = document.createElement('div');
+            card.style.cssText = `
+                background:var(--tg-secondary-bg-color); border-radius:14px;
+                padding:14px; margin-bottom:12px;
+                border-left:3px solid ${msg.reply ? '#22c55e' : '#ef4444'};
+            `;
+            const dateStr = msg.created_at ? new Date(msg.created_at).toLocaleString('tr-TR') : '';
+            card.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <div style="
+                        width:34px; height:34px; border-radius:50%; flex-shrink:0;
+                        background:linear-gradient(135deg,#6366f1,#4f46e5);
+                        display:flex; align-items:center; justify-content:center;
+                        font-weight:700; color:#fff; font-size:14px;
+                    ">${(msg.first_name || 'U').charAt(0).toUpperCase()}</div>
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:600; font-size:13px; color:var(--tg-text-color);">
+                            ${escapeHtmlAdmin(msg.first_name || '')}
+                            <span style="color:var(--tg-hint-color); font-weight:400; font-size:11px; margin-left:4px;">${escapeHtmlAdmin(msg.username || '')}</span>
+                        </div>
+                        <div style="font-size:11px; color:var(--tg-hint-color);">ID: ${msg.user_id} · ${dateStr}</div>
+                    </div>
+                    <span style="
+                        font-size:10px; font-weight:700; padding:3px 8px; border-radius:20px;
+                        background:${msg.reply ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'};
+                        color:${msg.reply ? '#22c55e' : '#ef4444'};
+                    ">${msg.reply ? '✓ Yanıtlandı' : '⏳ Bekliyor'}</span>
+                </div>
+                <div style="
+                    background:rgba(255,255,255,0.05); border-radius:10px;
+                    padding:10px 12px; margin-bottom:10px;
+                    font-size:13px; color:var(--tg-text-color); line-height:1.5;
+                ">${escapeHtmlAdmin(msg.message)}</div>
+                ${msg.reply ? `
+                <div style="
+                    background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2);
+                    border-radius:10px; padding:10px 12px; margin-bottom:10px;
+                    font-size:12px; color:#d1fae5; line-height:1.5;
+                ">
+                    <div style="font-size:10px; color:#22c55e; font-weight:600; margin-bottom:4px;">✓ Yanıtınız</div>
+                    ${escapeHtmlAdmin(msg.reply)}
+                </div>` : `
+                <div style="display:flex; gap:8px; margin-top:6px;">
+                    <input type="text" placeholder="Yanıtınızı yazın..."
+                        id="reply-input-${msg.id}"
+                        onkeydown="if(event.key==='Enter') adminReplySupport(${msg.id})"
+                        style="
+                            flex:1; background:rgba(255,255,255,0.08);
+                            border:1px solid rgba(255,255,255,0.12); border-radius:10px;
+                            padding:8px 12px; color:var(--tg-text-color); font-size:13px;
+                            font-family:inherit; outline:none;
+                        ">
+                    <button onclick="adminReplySupport(${msg.id})" style="
+                        padding:8px 14px; border-radius:10px; border:none; cursor:pointer;
+                        background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff;
+                        font-size:13px; font-weight:600; white-space:nowrap;
+                    ">Yanıtla</button>
+                </div>`}
+            `;
+            container.appendChild(card);
+        });
+
+    } catch(err) {
+        console.error('Destek mesajları yüklenemedi:', err);
+        container.innerHTML = '<p style="color:var(--color-danger); padding:20px; text-align:center;">Bağlantı hatası.</p>';
+    }
+}
+
+async function adminReplySupport(msgId) {
+    const input = document.getElementById(`reply-input-${msgId}`);
+    if (!input || !currentUserData) return;
+    const reply = input.value.trim();
+    if (!reply) { showAlert('Yanıt boş olamaz.'); return; }
+    input.disabled = true;
+    try {
+        const res = await fetch('/api/admin/support/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                admin_id: currentUserData.telegram_id,
+                msg_id: msgId,
+                reply: reply
+            })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            showToast('✅ Yanıt gönderildi, kullanıcıya Telegram bildirimi iletildi.');
+            await loadAdminSupportMessages();
+        } else {
+            showAlert('Yanıt gönderilemedi.');
+            input.disabled = false;
+        }
+    } catch(err) {
+        showAlert('Bağlantı hatası.');
+        input.disabled = false;
+    }
+}
+
+function escapeHtmlAdmin(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/\n/g,'<br>');
 }
