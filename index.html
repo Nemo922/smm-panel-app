@@ -716,6 +716,13 @@
                                 <option value="tiktok">TikTok</option>
                                 <option value="twitter">Twitter / X</option>
                                 <option value="youtube">YouTube</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="linkedin">LinkedIn</option>
+                                <option value="spotify">Spotify</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="snapchat">Snapchat</option>
+                                <option value="telegram">Telegram</option>
+                                <option value="discord">Discord</option>
                                 <option value="other">Diğer</option>
                             </select>
                         </div>
@@ -770,6 +777,35 @@
                 </div>
                 <div id="admin-users-list">
                     <p style="text-align:center; color:var(--tg-hint-color); padding: 20px;">Yükleniyor...</p>
+                </div>
+                <!-- Kullanıcı Detay Görünümü (başlangıçta gizli) -->
+                <div id="admin-user-detail-view" style="display:none;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+                        <button id="btn-user-detail-back" style="background:var(--tg-secondary-bg-color); border:none; border-radius:10px; padding:8px 12px; color:var(--tg-text-color); cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;">
+                            <i class="ph ph-arrow-left"></i> Geri
+                        </button>
+                        <h3 id="user-detail-title" style="margin:0; font-size:16px; font-weight:700; color:var(--tg-text-color);">Kullanıcı Detay</h3>
+                    </div>
+
+                    <!-- Kullanıcı Bilgi Kartı -->
+                    <div id="user-detail-info-card" style="background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; padding:16px; margin-bottom:14px;"></div>
+
+                    <!-- Sekmeler -->
+                    <div style="display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; padding-bottom:4px;">
+                        <button class="user-detail-tab active" data-utab="utab-balance" style="flex-shrink:0; padding:8px 14px; border:1px solid var(--glass-border); border-radius:10px; background:var(--tg-button-color); color:var(--tg-button-text-color); font-size:12px; font-weight:600; cursor:pointer;">
+                            <i class="ph ph-wallet"></i> Bakiye Hareketleri
+                        </button>
+                        <button class="user-detail-tab" data-utab="utab-orders" style="flex-shrink:0; padding:8px 14px; border:1px solid var(--glass-border); border-radius:10px; background:var(--tg-secondary-bg-color); color:var(--tg-text-color); font-size:12px; font-weight:600; cursor:pointer;">
+                            <i class="ph ph-receipt"></i> Siparişler
+                        </button>
+                        <button class="user-detail-tab" data-utab="utab-activity" style="flex-shrink:0; padding:8px 14px; border:1px solid var(--glass-border); border-radius:10px; background:var(--tg-secondary-bg-color); color:var(--tg-text-color); font-size:12px; font-weight:600; cursor:pointer;">
+                            <i class="ph ph-list-magnifying-glass"></i> Aktivite
+                        </button>
+                    </div>
+
+                    <div id="utab-balance" class="user-detail-tab-content"></div>
+                    <div id="utab-orders" class="user-detail-tab-content" style="display:none;"></div>
+                    <div id="utab-activity" class="user-detail-tab-content" style="display:none;"></div>
                 </div>
             </div>
 

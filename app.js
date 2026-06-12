@@ -1432,7 +1432,8 @@ function setupPaymentModal() {
         });
     });
 
-    if (btnSubmitPayment) {
+    if (btnSubmitPayment && !btnSubmitPayment._paymentListenerBound) {
+        btnSubmitPayment._paymentListenerBound = true;
         btnSubmitPayment.addEventListener('click', async () => {
             const amountVal = parseFloat(inputPaymentAmount.value) || 0;
             const detailsVal = inputPaymentDetails.value.trim();
@@ -2030,6 +2031,9 @@ async function loadAdminUsers() {
                         <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b></div>
                     </div>
                     <div style="display:flex; gap:6px;">
+                        <button class="btn-view-user-detail" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" style="width:36px;height:36px;border-radius:8px;border:none;background:rgba(99,102,241,0.12);color:#6366f1;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:opacity 0.2s;" title="Detay">
+                            <i class="ph ph-eye"></i>
+                        </button>
                         <button class="btn-edit-user" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" data-balance="${user.balance || 0}" data-vip="${user.vip_level || 0}" data-blocked="${user.is_blocked || false}" data-admin="${user.is_admin || false}">
                             <i class="ph ph-pencil-simple"></i>
                         </button>
@@ -2050,6 +2054,12 @@ async function loadAdminUsers() {
                 btn.addEventListener('click', (e) => {
                     const b = e.currentTarget;
                     openAddBalanceModal(b.dataset.tgid, b.dataset.name);
+                });
+            });
+            container.querySelectorAll('.btn-view-user-detail').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const b = e.currentTarget;
+                    openUserDetailView(b.dataset.tgid, b.dataset.name);
                 });
             });
         } else {
@@ -2181,6 +2191,200 @@ if (btnSubmitAddBalance) {
             btnSubmitAddBalance.textContent = "Bakiyeyi Ekle ve Bildir"; 
         }
     });
+}
+
+// ─── USER DETAIL VIEW (Admin) ────────────────────────────────
+async function openUserDetailView(tgId, name) {
+    const listEl = document.getElementById('admin-users-list');
+    const detailEl = document.getElementById('admin-user-detail-view');
+    if (!listEl || !detailEl) return;
+
+    listEl.style.display = 'none';
+    detailEl.style.display = 'block';
+    document.getElementById('user-detail-title').textContent = `${name} — Detay`;
+
+    const infoCard = document.getElementById('user-detail-info-card');
+    const balanceTab = document.getElementById('utab-balance');
+    const ordersTab = document.getElementById('utab-orders');
+    const activityTab = document.getElementById('utab-activity');
+
+    infoCard.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:12px;">Yükleniyor...</p>';
+    balanceTab.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:12px;">Yükleniyor...</p>';
+
+    try {
+        const res = await fetch(`/api/admin/user/detail?tg_id=${currentUserData.telegram_id}&user_tg_id=${tgId}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            infoCard.innerHTML = `<p style="color:var(--color-danger);padding:12px;">${data.detail || 'Yüklenemedi'}</p>`;
+            return;
+        }
+
+        const u = data.user;
+        const joinDate = u.joined_date ? new Date(u.joined_date).toLocaleDateString('tr-TR') : '—';
+        let vipBadge = u.vip_level > 0 ? `<span style="background:#f59e0b22;color:#f59e0b;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;"><i class="ph-fill ph-crown"></i> VIP ${u.vip_level}</span>` : '';
+        let adminBadge = u.is_admin ? `<span style="background:rgba(59,130,246,0.12);color:#3b82f6;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;"><i class="ph-fill ph-shield-star"></i> Admin</span>` : '';
+        let blockedBadge = u.is_blocked ? `<span style="background:rgba(239,68,68,0.12);color:var(--color-danger);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;">Engellenmiş</span>` : '';
+
+        infoCard.innerHTML = `
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+                <div style="width:52px;height:52px;border-radius:50%;background:var(--tg-button-color);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--tg-button-text-color);flex-shrink:0;">
+                    ${(u.first_name || '?').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:var(--tg-text-color);">${u.first_name || 'Bilinmiyor'}</div>
+                    <div style="font-size:12px;color:var(--tg-hint-color);">@${u.custom_username || '—'} · ID: <code>${u.telegram_id}</code></div>
+                    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">${vipBadge}${adminBadge}${blockedBadge}</div>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="background:rgba(34,197,94,0.08);border-radius:12px;padding:10px 14px;">
+                    <div style="font-size:10px;color:var(--tg-hint-color);font-weight:600;">BAKİYE</div>
+                    <div style="font-size:18px;font-weight:800;color:var(--color-success);">₺${parseFloat(u.balance||0).toFixed(2)}</div>
+                </div>
+                <div style="background:rgba(99,102,241,0.08);border-radius:12px;padding:10px 14px;">
+                    <div style="font-size:10px;color:var(--tg-hint-color);font-weight:600;">TOPLAM SİPARİŞ</div>
+                    <div style="font-size:18px;font-weight:800;color:#6366f1;">${data.orders.length}</div>
+                </div>
+                <div style="background:rgba(245,158,11,0.08);border-radius:12px;padding:10px 14px;">
+                    <div style="font-size:10px;color:var(--tg-hint-color);font-weight:600;">TOPLAM HARCAMA</div>
+                    <div style="font-size:16px;font-weight:700;color:#f59e0b;">₺${data.orders.reduce((s,o)=>s+parseFloat(o.price||0),0).toFixed(2)}</div>
+                </div>
+                <div style="background:var(--tg-secondary-bg-color);border-radius:12px;padding:10px 14px;">
+                    <div style="font-size:10px;color:var(--tg-hint-color);font-weight:600;">KAYIT TARİHİ</div>
+                    <div style="font-size:14px;font-weight:600;color:var(--tg-text-color);">${joinDate}</div>
+                </div>
+            </div>
+        `;
+
+        // Balance history tab
+        const bhTypeConfig = {
+            'sipariş':       { icon: 'ph-shopping-cart',    color: '#ef4444', sign: '-' },
+            'yükleme':       { icon: 'ph-trend-up',          color: '#22c55e', sign: '+' },
+            'admin_ekleme':  { icon: 'ph-plus-circle',       color: '#3b82f6', sign: '+' },
+            'iade':          { icon: 'ph-arrow-u-down-left', color: '#f59e0b', sign: '+' },
+            'komisyon':      { icon: 'ph-gift',              color: '#a855f7', sign: '+' },
+        };
+
+        if (data.balance_history && data.balance_history.length > 0) {
+            balanceTab.innerHTML = data.balance_history.map(h => {
+                const cfg = bhTypeConfig[h.type] || { icon: 'ph-clock', color: 'var(--tg-hint-color)', sign: '' };
+                const d = new Date((h.created_at||'') + (h.created_at?.includes('Z') ? '' : 'Z'));
+                const ds = d.toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+                return `
+                <div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:12px;margin-bottom:8px;">
+                    <div style="width:36px;height:36px;border-radius:50%;background:${cfg.color}22;display:flex;align-items:center;justify-content:center;color:${cfg.color};font-size:16px;flex-shrink:0;">
+                        <i class="ph-fill ${cfg.icon}"></i>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:600;color:var(--tg-text-color);">${h.description || h.type}</div>
+                        <div style="font-size:11px;color:var(--tg-hint-color);">${ds}</div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;">
+                        <div style="font-size:14px;font-weight:700;color:${cfg.color};">${cfg.sign}₺${Math.abs(h.amount).toFixed(2)}</div>
+                        ${h.balance_after != null ? `<div style="font-size:10px;color:var(--tg-hint-color);">Kalan: ₺${parseFloat(h.balance_after).toFixed(2)}</div>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+        } else {
+            balanceTab.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Bakiye hareketi yok.</p>';
+        }
+
+        // Orders tab
+        if (data.orders && data.orders.length > 0) {
+            const statusColors = { 'Tamamlandı': 'var(--color-success)', 'İptal Edildi': 'var(--color-danger)', 'Bekliyor': 'var(--color-warning)', 'İşlemde': 'var(--tg-button-color)' };
+            ordersTab.innerHTML = data.orders.map(o => {
+                const sc = statusColors[o.status] || 'var(--tg-hint-color)';
+                const od = new Date((o.order_date||'') + (o.order_date?.includes('T') ? 'Z' : ''));
+                const ds = od.toLocaleDateString('tr-TR');
+                return `
+                <div style="background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:12px;padding:12px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <span style="font-size:12px;font-weight:700;color:var(--tg-hint-color);">#${o.id} · ${ds}</span>
+                        <span style="font-size:11px;font-weight:700;color:${sc};">${o.status}</span>
+                    </div>
+                    <div style="font-size:13px;font-weight:600;color:var(--tg-text-color);margin-bottom:4px;">${o.service_name || `Servis #${o.service_id}`}</div>
+                    <div style="font-size:11px;color:var(--tg-hint-color);word-break:break-all;margin-bottom:4px;">🔗 ${o.link}</div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--tg-hint-color);">
+                        <span>Miktar: <b>${o.quantity?.toLocaleString()}</b></span>
+                        <span style="font-weight:700;color:var(--tg-text-color);">₺${parseFloat(o.price||0).toFixed(2)}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        } else {
+            ordersTab.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Sipariş bulunamadı.</p>';
+        }
+
+        // Activity tab
+        const actionIcons = {
+            'kayıt':              { icon: 'ph-user-plus',      color: '#22c55e' },
+            'sipariş_verildi':    { icon: 'ph-shopping-cart',  color: '#6366f1' },
+            'ödeme_bildirimi':    { icon: 'ph-money',          color: '#f59e0b' },
+            'bakiye_yüklendi':    { icon: 'ph-trend-up',       color: '#22c55e' },
+            'sipariş_iptal':      { icon: 'ph-x-circle',       color: '#ef4444' },
+            'admin_bakiye_ekledi':{ icon: 'ph-plus-circle',    color: '#3b82f6' },
+            'toplu_sipariş':      { icon: 'ph-stack',          color: '#8b5cf6' },
+        };
+
+        if (data.activity && data.activity.length > 0) {
+            activityTab.innerHTML = data.activity.map(log => {
+                const info = actionIcons[log.action] || { icon: 'ph-clock', color: 'var(--tg-hint-color)' };
+                const d = new Date(log.created_at + (log.created_at?.includes('Z') ? '' : 'Z'));
+                const ds = d.toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+                return `
+                <div style="display:flex;align-items:flex-start;gap:12px;padding:10px;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:12px;margin-bottom:8px;">
+                    <div style="width:34px;height:34px;border-radius:50%;background:${info.color}22;display:flex;align-items:center;justify-content:center;color:${info.color};font-size:15px;flex-shrink:0;">
+                        <i class="ph-fill ${info.icon}"></i>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;justify-content:space-between;gap:6px;">
+                            <span style="font-size:12px;font-weight:600;color:${info.color};">${log.action.replace(/_/g,' ')}</span>
+                            <span style="font-size:11px;color:var(--tg-hint-color);white-space:nowrap;">${ds}</span>
+                        </div>
+                        ${log.detail ? `<div style="font-size:11px;color:var(--tg-hint-color);margin-top:2px;">${log.detail}</div>` : ''}
+                    </div>
+                </div>`;
+            }).join('');
+        } else {
+            activityTab.innerHTML = '<p style="text-align:center;color:var(--tg-hint-color);padding:20px;">Aktivite kaydı yok.</p>';
+        }
+
+    } catch (e) {
+        infoCard.innerHTML = '<p style="color:var(--color-danger);padding:12px;">Sunucu bağlantı hatası.</p>';
+    }
+
+    // Tab switching
+    document.querySelectorAll('.user-detail-tab').forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll('.user-detail-tab').forEach(b => {
+                b.style.background = 'var(--tg-secondary-bg-color)';
+                b.style.color = 'var(--tg-text-color)';
+            });
+            document.querySelectorAll('.user-detail-tab-content').forEach(c => c.style.display = 'none');
+            btn.style.background = 'var(--tg-button-color)';
+            btn.style.color = 'var(--tg-button-text-color)';
+            const target = btn.getAttribute('data-utab');
+            const el = document.getElementById(target);
+            if (el) el.style.display = 'block';
+        };
+    });
+
+    // Back button
+    const backBtn = document.getElementById('btn-user-detail-back');
+    if (backBtn) {
+        backBtn.onclick = () => {
+            detailEl.style.display = 'none';
+            listEl.style.display = 'block';
+            // Reset tabs
+            document.querySelectorAll('.user-detail-tab').forEach((b, i) => {
+                b.style.background = i === 0 ? 'var(--tg-button-color)' : 'var(--tg-secondary-bg-color)';
+                b.style.color = i === 0 ? 'var(--tg-button-text-color)' : 'var(--tg-text-color)';
+            });
+            document.querySelectorAll('.user-detail-tab-content').forEach((c, i) => {
+                c.style.display = i === 0 ? 'block' : 'none';
+            });
+        };
+    }
 }
 
 // ─── ORDERS TAB ──────────────────────────────────────────────

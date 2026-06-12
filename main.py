@@ -388,27 +388,11 @@ async def place_order(data: NewOrder):
         f"Sipariş #{order_id} | {service_name} | {data.quantity:,} adet | ₺{final_price:.2f}"
     )
 
-    # Kullanıcıya bildirim
-    user_msg = (
-        f"✅ <b>Siparişiniz Alındı!</b>\n\n"
-        f"📦 Hizmet: {service_name}\n"
-        f"🔗 Link: <code>{data.link}</code>\n"
-        f"🔢 Miktar: {data.quantity:,}\n"
-        f"💰 Tutar: ₺{final_price:.2f}\n"
-        f"🆔 Sipariş No: #{order_id}\n\n"
-        f"<i>Kalan Bakiye: ₺{new_balance:.2f}</i>"
-    )
-    await send_telegram_message(data.telegram_id, user_msg)
-
-    # Admin'e bildirim
+    # Admin'e SADECE kısa bildirim (detaylar panel üzerinden görülür)
     admin_ids = get_admin_ids()
     admin_msg = (
-        f"🛒 <b>YENİ SİPARİŞ #{order_id}</b>\n\n"
-        f"👤 Kullanıcı: {user.get('first_name', 'Bilinmiyor')} (@{user.get('custom_username', '?')})\n"
-        f"📦 Hizmet: {service_name}\n"
-        f"🔗 Link: <code>{data.link}</code>\n"
-        f"🔢 Miktar: {data.quantity:,}\n"
-        f"💰 Tutar: ₺{final_price:.2f}"
+        f"🛒 <b>Yeni Sipariş #{order_id}</b>\n"
+        f"👤 {user.get('first_name', 'Bilinmiyor')} · {service_name[:30]} · ₺{final_price:.2f}"
     )
     for admin_id in admin_ids:
         await send_telegram_message(admin_id, admin_msg)
@@ -429,15 +413,13 @@ async def new_payment_request(data: NewPaymentRequest):
         data.telegram_id, "ödeme_bildirimi",
         f"₺{data.amount:.2f} | {data.payment_method}"
     )
-    # Admin'e bildirim
+    # Admin'e SADECE yeni bildirim mesajı (detay panel üzerinden görülür)
     admin_ids = get_admin_ids()
     user = await database.get_user(data.telegram_id)
     admin_msg = (
-        f"💳 <b>YENİ BAKİYE YÜKLEME TALEBİ</b>\n\n"
-        f"👤 Kullanıcı: {user.get('first_name','?')} (@{user.get('custom_username','?')})\n"
-        f"💰 Tutar: ₺{data.amount:.2f}\n"
-        f"🏦 Yöntem: {data.payment_method}\n"
-        f"📝 Açıklama: {data.details}"
+        f"💳 <b>YENİ BAKİYE YÜKLEME TALEBİ</b>\n"
+        f"👤 {user.get('first_name','?')} (@{user.get('custom_username','?')}) · ₺{data.amount:.2f}\n"
+        f"Detaylar için paneli kontrol edin."
     )
     for admin_id in admin_ids:
         await send_telegram_message(admin_id, admin_msg)
@@ -459,13 +441,12 @@ async def admin_pending_payments(tg_id: int):
 @app.post("/api/admin/approve-payment")
 async def admin_approve_payment(data: AdminAction):
     verify_admin(data.admin_id)
-    # Get request details for notification
+    # Tüm bekleyen talepleri değil, tamamlanmışları da ara
     reqs = await database.get_pending_payment_requests()
     req = next((r for r in reqs if r['id'] == data.request_id), None)
     success = await database.approve_payment_request(data.request_id)
     if success:
         if req:
-            # Save details in database notifications
             note_str = f" Not: {data.note}" if data.note else ""
             await database.create_notification(
                 req['user_id'], 
@@ -476,15 +457,18 @@ async def admin_approve_payment(data: AdminAction):
                 req['user_id'], "bakiye_yüklendi",
                 f"₺{req['amount']:.2f} ödeme onaylandı (Admin: {data.admin_id})"
             )
-            # Bakiye geçmişi
             refreshed = await database.get_user(req['user_id'])
             await database.add_balance_history(
                 req['user_id'], req['amount'], "yükleme",
                 f"{req.get('payment_method','Ödeme')} onaylandı",
                 refreshed['balance'] if refreshed else req['amount']
             )
-            # Send generic message to Telegram
-            tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+            # Kullanıcıya TEK Telegram bildirimi
+            tg_msg = (
+                f"✅ <b>Bakiye Yükleme Onaylandı</b>\n"
+                f"₺{req['amount']:.2f} hesabınıza yüklendi.{note_str}\n"
+                f"Detaylar için uygulamaya giriş yapın."
+            )
             await send_telegram_message(req['user_id'], tg_msg)
             
             # REFERRAL KOMISYON SISTEMI (%5)
@@ -498,11 +482,11 @@ async def admin_approve_payment(data: AdminAction):
                         await database.create_notification(
                             user['referred_by'],
                             "Referans Kazancı",
-                            f"Davet ettiğiniz kullanıcı bakiye yükledi. Yüklemeden ₺{commission:.2f} komisyon kazandınız!"
+                            f"Davet ettiğiniz kullanıcı bakiye yükledi. ₺{commission:.2f} komisyon kazandınız!"
                         )
                         await send_telegram_message(
                             user['referred_by'], 
-                            f"🎁 <b>Tebrikler!</b>\n\nDavet ettiğiniz bir kullanıcı bakiye yükledi ve siz de <b>₺{commission:.2f}</b> komisyon kazandınız!"
+                            f"🎁 <b>Referans Komisyonu</b>\n₺{commission:.2f} bakiyenize eklendi."
                         )
 
         return {"success": True, "message": "Ödeme onaylandı ve bakiye eklendi."}
@@ -516,15 +500,18 @@ async def admin_reject_payment(data: AdminAction):
     success = await database.reject_payment_request(data.request_id)
     if success:
         if req:
-            # Save details in database notifications
             note_str = f" Not: {data.note}" if data.note else ""
             await database.create_notification(
                 req['user_id'], 
                 "Ödemeniz Reddedildi", 
                 f"₺{req['amount']:.2f} tutarındaki ödemeniz reddedildi.{note_str}"
             )
-            # Send generic message to Telegram
-            tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+            # Kullanıcıya TEK Telegram bildirimi
+            tg_msg = (
+                f"❌ <b>Bakiye Yükleme Reddedildi</b>\n"
+                f"₺{req['amount']:.2f} talebiniz reddedildi.{note_str}\n"
+                f"Detaylar için uygulamaya giriş yapın."
+            )
             await send_telegram_message(req['user_id'], tg_msg)
         return {"success": True, "message": "Ödeme bildirimi reddedildi."}
     return {"success": False, "message": "İşlem başarısız veya zaten işlenmiş."}
@@ -582,6 +569,39 @@ async def admin_get_users(tg_id: int):
         if u.get('joined_date'):
             u['joined_date'] = str(u['joined_date'])
     return {"success": True, "users": users}
+
+@app.get("/api/admin/user/detail")
+async def admin_get_user_detail(tg_id: int, user_tg_id: int):
+    """Admin: Belirli bir kullanıcının tüm detaylarını, siparişlerini ve bakiye hareketlerini döndürür."""
+    verify_admin(tg_id)
+    user = await database.get_user(user_tg_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı bulunamadı")
+    if user.get('joined_date'):
+        user['joined_date'] = str(user['joined_date'])
+    
+    orders = await database.get_user_orders(user_tg_id)
+    for o in orders:
+        if o.get('order_date'):
+            o['order_date'] = str(o['order_date'])
+    
+    balance_history = await database.get_user_balance_history(user_tg_id, limit=100)
+    for h in balance_history:
+        if h.get('created_at'):
+            h['created_at'] = str(h['created_at'])
+    
+    activity = await database.get_activity_log(user_id=user_tg_id, limit=100)
+    for a in activity:
+        if a.get('created_at'):
+            a['created_at'] = str(a['created_at'])
+    
+    return {
+        "success": True,
+        "user": user,
+        "orders": orders,
+        "balance_history": balance_history,
+        "activity": activity
+    }
 
 @app.post("/api/admin/user/update")
 async def admin_update_user(data: AdminUpdateUser):
@@ -644,8 +664,12 @@ async def admin_add_balance(data: AdminAddBalance):
         f"Hesabınıza ₺{data.amount:.2f} eklendi. Güncel Bakiyeniz: ₺{new_balance:.2f}.{note_str}"
     )
     
-    # Send generic message to Telegram
-    tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
+    # Kullanıcıya kısa Telegram bildirimi
+    tg_msg = (
+        f"💰 <b>Bakiye Eklendi</b>\n"
+        f"₺{data.amount:.2f} hesabınıza eklendi.\n"
+        f"Detaylar için uygulamaya giriş yapın."
+    )
     await send_telegram_message(data.telegram_id, tg_msg)
     
     return {"success": True, "message": f"Bakiye eklendi ve kullanıcıya mesaj gönderildi."}
@@ -683,6 +707,7 @@ async def admin_cancel_order(data: AdminOrderAction):
         tg_msg = "✉️ <b>Bir mesajınız bulunmaktadır.</b>\n\nLütfen detayları görmek için uygulamaya giriş sağlayınız."
         await send_telegram_message(result['user_id'], tg_msg)
         return {"success": True, "message": "Sipariş iptal edildi ve bakiye iade edildi."}
+
     return {"success": False, "message": "Sipariş bulunamadı veya zaten iptal edilmiş."}
 
 @app.post("/api/admin/order/update-status")
@@ -695,9 +720,13 @@ async def admin_update_order_status(data: AdminOrderStatus):
             "Sipariş Durumu Güncellendi",
             f"#{data.order_id} numaralı siparişinizin durumu '{data.status}' olarak güncellendi."
         )
-        if data.status in ["Tamamlandı", "İşlemde"]:
-            icon = "✅" if data.status == "Tamamlandı" else "🔄"
-            tg_msg = f"{icon} <b>Siparişiniz {data.status}</b>\n\n#{data.order_id} numaralı siparişinizin durumu güncellendi. Detaylar için uygulamayı ziyaret edebilirsiniz."
+        # Tamamlandı veya İptal durumunda kullanıcıya kısa bildirim
+        if data.status in ["Tamamlandı", "İptal Edildi"]:
+            icon = "✅" if data.status == "Tamamlandı" else "❌"
+            tg_msg = (
+                f"{icon} <b>Sipariş #{data.order_id} {data.status}</b>\n"
+                f"Detaylar için uygulamayı açın."
+            )
             await send_telegram_message(user_id, tg_msg)
             
     return {"success": True, "message": f"Sipariş durumu '{data.status}' olarak güncellendi."}
@@ -733,6 +762,49 @@ async def admin_update_setting(data: AdminUpdateSetting):
     verify_admin(data.admin_id)
     await database.update_setting(data.key, data.value)
     return {"success": True, "message": "Ayar güncellendi."}
+
+@app.get("/api/admin/seed-services")
+async def seed_services_endpoint(tg_id: int):
+    verify_admin(tg_id)
+    platforms = [
+        {"id": "instagram", "icon": "ph-instagram-logo"},
+        {"id": "tiktok", "icon": "ph-tiktok-logo"},
+        {"id": "twitter", "icon": "ph-twitter-logo"},
+        {"id": "youtube", "icon": "ph-youtube-logo"},
+        {"id": "facebook", "icon": "ph-facebook-logo"},
+        {"id": "linkedin", "icon": "ph-linkedin-logo"},
+        {"id": "spotify", "icon": "ph-spotify-logo"},
+        {"id": "twitch", "icon": "ph-twitch-logo"},
+        {"id": "snapchat", "icon": "ph-snapchat-logo"},
+        {"id": "telegram", "icon": "ph-telegram-logo"},
+        {"id": "discord", "icon": "ph-discord-logo"}
+    ]
+    categories = [
+        {"name": "Takipçi", "desc": "Gerçek ve aktif takipçiler", "price": 25.0, "min": 100, "max": 10000},
+        {"name": "Beğeni", "desc": "Hızlı gelen beğeniler", "price": 10.0, "min": 50, "max": 20000},
+        {"name": "İzlenme", "desc": "Keşfet etkili izlenmeler", "price": 5.0, "min": 1000, "max": 1000000},
+        {"name": "Yorum", "desc": "Organik görünümlü yorumlar", "price": 40.0, "min": 10, "max": 1000}
+    ]
+    count = 0
+    async with database.db_pool.acquire() as conn:
+        for platform in platforms:
+            for cat in categories:
+                exists = await conn.fetchval(
+                    "SELECT 1 FROM services WHERE platform=$1 AND name LIKE $2",
+                    platform["id"], f"%{cat['name']}%"
+                )
+                if not exists:
+                    name = f"{platform['id'].capitalize()} {cat['name']}"
+                    await conn.execute(
+                        """
+                        INSERT INTO services 
+                        (platform, name, description, price_per_1000, min_order, max_order, icon, is_active)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        """,
+                        platform["id"], name, cat["desc"], cat["price"], cat["min"], cat["max"], platform["icon"], True
+                    )
+                    count += 1
+    return {"success": True, "message": f"{count} adet yeni servis eklendi."}
 
 # ═══════════════════════════════════════════════════════════════
 # ADMİN – ÖDEME YÖNTEMLERİ
