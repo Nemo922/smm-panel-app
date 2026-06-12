@@ -2094,12 +2094,21 @@ async function loadAdminUsers() {
                     adminText = ` · <span style="color:#3b82f6;font-weight:700;"><i class="ph-fill ph-shield-star"></i> ADMİN</span>`;
                 }
 
+                let refText = '';
+                if (user.referred_by) {
+                    const refUser = user.referred_by_custom || user.referred_by_username || `ID: ${user.referred_by}`;
+                    const displayRef = refUser.startsWith('@') ? refUser : `@${refUser}`;
+                    refText = `<span style="color:#10b981; font-weight:600;"><i class="ph ph-share-network"></i> REF: ${displayRef}</span>`;
+                } else {
+                    refText = `<span style="color:var(--tg-hint-color);"><i class="ph ph-user"></i> Normal</span>`;
+                }
+
                 card.innerHTML = `
                     <div class="admin-user-avatar">${(user.first_name || '?').charAt(0).toUpperCase()}</div>
                     <div class="admin-user-info">
                         <div class="admin-user-name">${user.first_name || 'Bilinmiyor'}</div>
                         <div class="admin-user-meta">@${user.custom_username || '—'} · ID: ${user.telegram_id}${vipText}${adminText}${blockedText}</div>
-                        <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b></div>
+                        <div class="admin-user-balance">Bakiye: <b>₺${parseFloat(user.balance || 0).toFixed(2)}</b> · ${refText}</div>
                     </div>
                     <div style="display:flex; gap:6px;">
                         <button class="btn-view-user-detail" data-tgid="${user.telegram_id}" data-name="${user.first_name || ''}" style="width:36px;height:36px;border-radius:8px;border:none;background:rgba(99,102,241,0.12);color:#6366f1;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:opacity 0.2s;" title="Detay">
@@ -2296,6 +2305,14 @@ async function openUserDetailView(tgId, name) {
         let vipBadge = u.vip_level > 0 ? `<span style="background:#f59e0b22;color:#f59e0b;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;"><i class="ph-fill ph-crown"></i> VIP ${u.vip_level}</span>` : '';
         let adminBadge = u.is_admin ? `<span style="background:rgba(59,130,246,0.12);color:#3b82f6;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;"><i class="ph-fill ph-shield-star"></i> Admin</span>` : '';
         let blockedBadge = u.is_blocked ? `<span style="background:rgba(239,68,68,0.12);color:var(--color-danger);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;">Engellenmiş</span>` : '';
+        let refBadge = '';
+        if (u.referred_by) {
+            const refUser = u.referred_by_custom || u.referred_by_username || `ID: ${u.referred_by}`;
+            const displayRef = refUser.startsWith('@') ? refUser : `@${refUser}`;
+            refBadge = `<span style="background:rgba(16,185,129,0.12);color:#10b981;border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;"><i class="ph ph-share-network"></i> REF: ${displayRef}</span>`;
+        } else {
+            refBadge = `<span style="background:var(--tg-secondary-bg-color);color:var(--tg-hint-color);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:700;"><i class="ph ph-user"></i> Normal</span>`;
+        }
 
         infoCard.innerHTML = `
             <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
@@ -2305,7 +2322,7 @@ async function openUserDetailView(tgId, name) {
                 <div>
                     <div style="font-size:16px;font-weight:800;color:var(--tg-text-color);">${u.first_name || 'Bilinmiyor'}</div>
                     <div style="font-size:12px;color:var(--tg-hint-color);">@${u.custom_username || '—'} · ID: <code>${u.telegram_id}</code></div>
-                    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">${vipBadge}${adminBadge}${blockedBadge}</div>
+                    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">${vipBadge}${adminBadge}${blockedBadge}${refBadge}</div>
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">

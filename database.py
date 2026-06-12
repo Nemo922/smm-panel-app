@@ -240,7 +240,7 @@ async def init_db():
             ('feat_favorites', 'false'),
             ('feat_reorder', 'false'),
             ('feat_coupons', 'false'),
-            ('feat_referral', 'false'),
+            ('feat_referral', 'true'),
             ('feat_stats', 'false'),
             ('feat_vip', 'false'),
             ('feat_faq', 'false'),
@@ -298,7 +298,15 @@ async def init_db():
 async def get_user(telegram_id: int):
     if not db_pool: return None
     async with db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT * FROM users WHERE telegram_id = $1", telegram_id)
+        row = await conn.fetchrow("""
+            SELECT 
+                u.*,
+                r.custom_username AS referred_by_custom,
+                r.username AS referred_by_username
+            FROM users u
+            LEFT JOIN users r ON u.referred_by = r.telegram_id
+            WHERE u.telegram_id = $1
+        """, telegram_id)
         return dict(row) if row else None
 
 async def check_custom_username_exists(custom_username: str) -> bool:
@@ -343,9 +351,24 @@ async def update_custom_username(telegram_id: int, custom_username: str):
 async def get_all_users():
     if not db_pool: return []
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT telegram_id, first_name, username, custom_username, balance, joined_date, vip_level, is_blocked, is_admin FROM users ORDER BY joined_date DESC"
-        )
+        rows = await conn.fetch("""
+            SELECT 
+                u.telegram_id, 
+                u.first_name, 
+                u.username, 
+                u.custom_username, 
+                u.balance, 
+                u.joined_date, 
+                u.vip_level, 
+                u.is_blocked, 
+                u.is_admin,
+                u.referred_by,
+                r.custom_username AS referred_by_custom,
+                r.username AS referred_by_username
+            FROM users u
+            LEFT JOIN users r ON u.referred_by = r.telegram_id
+            ORDER BY u.joined_date DESC
+        """)
         return [dict(r) for r in rows]
 
 async def admin_update_user(telegram_id: int, balance: float, first_name: str):
