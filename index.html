@@ -16,7 +16,7 @@
     <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=8">
     <!-- Chart.js library for feat_analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- FEAT: PWA Manifest (feat_pwa ile aktif olur, ama link her zaman ekli) -->
@@ -482,67 +482,89 @@
             </div>
 
             <!-- Admin Tab Navigation -->
-            <div class="admin-tabs">
-                <button class="admin-tab active" data-tab="tab-payments">
-                    <i class="ph ph-clock-clockwise"></i>
-                    <span>Ödemeler</span>
+            <div class="admin-tabs-wrapper" style="position: relative; display: flex; align-items: center; margin-bottom: 20px; width: 100%;">
+                <!-- Sol kaydırma butonu -->
+                <button id="admin-tab-scroll-left" style="
+                    position: absolute; left: 6px; z-index: 10;
+                    background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15);
+                    border-radius: 50%; width: 30px; height: 30px; display: none; align-items: center; justify-content: center;
+                    color: #fff; cursor: pointer; transition: background 0.2s, transform 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                    <i class="ph ph-caret-left" style="font-weight: bold; font-size: 16px;"></i>
                 </button>
-                <button class="admin-tab" data-tab="tab-services">
-                    <i class="ph ph-storefront"></i>
-                    <span>Ürünler</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-users">
-                    <i class="ph ph-users"></i>
-                    <span>Kullanıcılar</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-orders">
-                    <i class="ph ph-receipt"></i>
-                    <span>Siparişler</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-payment-methods">
-                    <i class="ph ph-credit-card"></i>
-                    <span>Yatırım</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-settings">
-                    <i class="ph ph-gear"></i>
-                    <span>Ayarlar</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-features">
-                    <i class="ph ph-toggle-left"></i>
-                    <span>Modüller</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-coupons" id="admin-tab-coupons-btn" style="display: none;">
-                    <i class="ph ph-ticket"></i>
-                    <span>Kuponlar</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-analytics" id="admin-tab-analytics-btn" style="display: none;">
-                    <i class="ph ph-chart-line"></i>
-                    <span>Analizler</span>
-                </button>
-                <button class="admin-tab" data-tab="tab-support" id="admin-tab-support-btn">
-                    <i class="ph ph-headset"></i>
-                    <span>Destek</span>
-                    <span id="support-pending-badge" style="
-                        display:none; background:#ef4444; color:#fff;
-                        border-radius:50%; width:16px; height:16px; font-size:9px;
-                        font-weight:700; align-items:center; justify-content:center;
-                        margin-left:2px;
-                    "></span>
-                </button>
-                <!-- FEAT: Activity Log Tab (feat_activity_log) -->
-                <button class="admin-tab" data-tab="tab-activity-log" id="admin-tab-activity-log-btn" style="display:none;">
-                    <i class="ph ph-list-magnifying-glass"></i>
-                    <span>Aktivite</span>
-                </button>
-                <!-- FEAT: Revenue Report Tab (feat_revenue) -->
-                <button class="admin-tab" data-tab="tab-revenue" id="admin-tab-revenue-btn" style="display:none;">
-                    <i class="ph ph-currency-circle-dollar"></i>
-                    <span>Gelir</span>
-                </button>
-                <!-- FEAT: Auto API Tab (feat_auto_api) -->
-                <button class="admin-tab" data-tab="tab-auto-api" id="admin-tab-auto-api-btn" style="display:none;">
-                    <i class="ph ph-plugs-connected"></i>
-                    <span>Oto API</span>
+
+                <div class="admin-tabs" id="admin-tabs-scrollable" style="flex: 1; margin-bottom: 0;">
+                    <button class="admin-tab active" data-tab="tab-payments">
+                        <i class="ph ph-clock-clockwise"></i>
+                        <span>Ödemeler</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-services">
+                        <i class="ph ph-storefront"></i>
+                        <span>Ürünler</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-users">
+                        <i class="ph ph-users"></i>
+                        <span>Kullanıcılar</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-orders">
+                        <i class="ph ph-receipt"></i>
+                        <span>Siparişler</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-payment-methods">
+                        <i class="ph ph-credit-card"></i>
+                        <span>Yatırım</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-settings">
+                        <i class="ph ph-gear"></i>
+                        <span>Ayarlar</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-features">
+                        <i class="ph ph-toggle-left"></i>
+                        <span>Modüller</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-coupons" id="admin-tab-coupons-btn" style="display: none;">
+                        <i class="ph ph-ticket"></i>
+                        <span>Kuponlar</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-analytics" id="admin-tab-analytics-btn" style="display: none;">
+                        <i class="ph ph-chart-line"></i>
+                        <span>Analizler</span>
+                    </button>
+                    <button class="admin-tab" data-tab="tab-support" id="admin-tab-support-btn">
+                        <i class="ph ph-headset"></i>
+                        <span>Destek</span>
+                        <span id="support-pending-badge" style="
+                            display:none; background:#ef4444; color:#fff;
+                            border-radius:50%; width:16px; height:16px; font-size:9px;
+                            font-weight:700; align-items:center; justify-content:center;
+                            margin-left:2px;
+                        "></span>
+                    </button>
+                    <!-- FEAT: Activity Log Tab (feat_activity_log) -->
+                    <button class="admin-tab" data-tab="tab-activity-log" id="admin-tab-activity-log-btn" style="display:none;">
+                        <i class="ph ph-list-magnifying-glass"></i>
+                        <span>Aktivite</span>
+                    </button>
+                    <!-- FEAT: Revenue Report Tab (feat_revenue) -->
+                    <button class="admin-tab" data-tab="tab-revenue" id="admin-tab-revenue-btn" style="display:none;">
+                        <i class="ph ph-currency-circle-dollar"></i>
+                        <span>Gelir</span>
+                    </button>
+                    <!-- FEAT: Auto API Tab (feat_auto_api) -->
+                    <button class="admin-tab" data-tab="tab-auto-api" id="admin-tab-auto-api-btn" style="display:none;">
+                        <i class="ph ph-plugs-connected"></i>
+                        <span>Oto API</span>
+                    </button>
+                </div>
+
+                <!-- Sağ kaydırma butonu -->
+                <button id="admin-tab-scroll-right" style="
+                    position: absolute; right: 6px; z-index: 10;
+                    background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15);
+                    border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+                    color: #fff; cursor: pointer; transition: background 0.2s, transform 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                " onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                    <i class="ph ph-caret-right" style="font-weight: bold; font-size: 16px;"></i>
                 </button>
             </div>
 
@@ -1654,6 +1676,6 @@
     </div>
 
     <!-- Custom JS -->
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
 </body>
 </html>

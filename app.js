@@ -4634,6 +4634,91 @@ async function checkSpinStatus() {
     }
 })();
 
+(function initAdminTabsScroll() {
+    const tabs = document.getElementById('admin-tabs-scrollable');
+    const btnLeft = document.getElementById('admin-tab-scroll-left');
+    const btnRight = document.getElementById('admin-tab-scroll-right');
+    if (!tabs) return;
+
+    if (btnLeft) {
+        btnLeft.addEventListener('click', () => {
+            tabs.scrollBy({ left: -180, behavior: 'smooth' });
+        });
+    }
+    if (btnRight) {
+        btnRight.addEventListener('click', () => {
+            tabs.scrollBy({ left: 180, behavior: 'smooth' });
+        });
+    }
+
+    function updateScrollButtons() {
+        if (!btnLeft || !btnRight) return;
+        const scrollLeft = Math.ceil(tabs.scrollLeft);
+        const maxScroll = tabs.scrollWidth - tabs.clientWidth;
+
+        if (scrollLeft > 2) {
+            btnLeft.style.display = 'flex';
+        } else {
+            btnLeft.style.display = 'none';
+        }
+
+        if (scrollLeft < maxScroll - 2) {
+            btnRight.style.display = 'flex';
+        } else {
+            btnRight.style.display = 'none';
+        }
+    }
+
+    tabs.addEventListener('scroll', updateScrollButtons);
+    setTimeout(updateScrollButtons, 500);
+    window.addEventListener('resize', updateScrollButtons);
+    
+    // Check when admin panel triggers
+    const btnAdmin = document.getElementById('menu-admin');
+    if (btnAdmin) {
+        btnAdmin.addEventListener('click', () => {
+            setTimeout(updateScrollButtons, 300);
+        });
+    }
+    
+    document.querySelectorAll('[data-target="view-profile"]').forEach(el => {
+        el.addEventListener('click', () => {
+            setTimeout(updateScrollButtons, 300);
+        });
+    });
+
+    let isDown = false;
+    let startX;
+    let scrollLeft;
+
+    tabs.addEventListener('mousedown', (e) => {
+        isDown = true;
+        tabs.style.cursor = 'grabbing';
+        startX = e.pageX - tabs.offsetLeft;
+        scrollLeft = tabs.scrollLeft;
+    });
+
+    tabs.addEventListener('mouseleave', () => {
+        isDown = false;
+        tabs.style.cursor = 'grab';
+    });
+
+    tabs.addEventListener('mouseup', () => {
+        isDown = false;
+        tabs.style.cursor = 'grab';
+    });
+
+    tabs.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - tabs.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        tabs.scrollLeft = scrollLeft - walk;
+    });
+
+    tabs.style.cursor = 'grab';
+})();
+
 
 
 
